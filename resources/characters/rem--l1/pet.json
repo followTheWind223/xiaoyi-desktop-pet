@@ -1,0 +1,25 @@
+{
+  "id": "rem--l1",
+  "displayName": "Rem",
+  "description": "一只喜欢冰淇淋、安静又贴心的可爱桌宠。",
+  "spritesheetPath": "spritesheet.webp",
+  "spriteVersionNumber": 1,
+  "atlas": {
+    "columns": 8,
+    "rows": 9
+  },
+  "animations": [
+    { "id": "idle", "label": "待机", "row": 0, "mode": "loop", "states": ["idle"] },
+    { "id": "running-right", "label": "向右跑", "row": 1, "mode": "loop", "states": ["moving_right"] },
+    { "id": "running-left", "label": "向左跑", "row": 2, "mode": "loop", "states": ["moving_left"] },
+    { "id": "waving", "label": "挥手", "row": 3, "mode": "once", "states": ["hover", "input_open"] },
+    { "id": "jumping", "label": "跳跃", "row": 4, "mode": "loop", "states": ["dragging"] },
+    { "id": "failed", "label": "失败", "row": 5, "mode": "once", "states": ["error"] },
+    { "id": "waiting", "label": "等待", "row": 6, "mode": "loop", "states": ["listening", "transcribing", "sleeping"] },
+    { "id": "running", "label": "奔跑 / 工作", "row": 7, "mode": "loop", "states": ["thinking"] },
+    { "id": "review", "label": "复盘 / 回答", "row": 8, "mode": "loop", "states": ["speaking"] }
+  ],
+  "behavior": {
+    "fps": 6
+  }
+}

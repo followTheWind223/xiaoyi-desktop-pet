@@ -1,0 +1,53 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+function subscribe(channel, callback) {
+  if (typeof callback !== 'function') return () => {};
+  const listener = (_event, payload) => callback(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
+contextBridge.exposeInMainWorld('desktopRuntime', Object.freeze({
+  isDesktop: true,
+  platform: process.platform,
+  loadConsoleSettings: () => ipcRenderer.invoke('settings:load'),
+  saveConsoleSettings: (payload) => ipcRenderer.invoke('settings:save', payload),
+  getApiKeyStatus: () => ipcRenderer.invoke('settings:api-key-status'),
+  saveApiKey: (apiKey) => ipcRenderer.invoke('settings:save-api-key', apiKey),
+  clearApiKey: () => ipcRenderer.invoke('settings:clear-api-key'),
+  testModelConnection: (llm) => ipcRenderer.invoke('settings:test-model', llm),
+  resetConsoleSettings: () => ipcRenderer.invoke('settings:reset'),
+  scanCharacterPackages: () => ipcRenderer.invoke('character-packages:scan'),
+  openCharacterPackagesFolder: () => ipcRenderer.invoke('character-packages:open-folder'),
+  syncConsoleState: (payload) => ipcRenderer.invoke('runtime:sync-console-state', payload),
+  getDesktopSnapshot: () => ipcRenderer.invoke('runtime:get-desktop-snapshot'),
+  previewPetAnimation: (animationId) => ipcRenderer.invoke('runtime:preview-pet-animation', animationId),
+  showPet: () => ipcRenderer.invoke('pet-window:show'),
+  hidePet: () => ipcRenderer.invoke('pet-window:hide'),
+  openPetInput: () => ipcRenderer.invoke('pet-bubble:show'),
+  hidePetBubble: () => ipcRenderer.invoke('pet-bubble:hide'),
+  setBubbleExpanded: (expanded) => ipcRenderer.invoke('pet-bubble:set-expanded', expanded),
+  openSettings: () => ipcRenderer.invoke('settings-window:show'),
+  resetPetPosition: () => ipcRenderer.invoke('pet-window:reset-position'),
+  walkPet: (direction) => ipcRenderer.invoke('pet-window:walk', direction),
+  beginPetMove: (pointer) => ipcRenderer.invoke('pet-window:begin-move', pointer),
+  movePetWindow: (delta) => ipcRenderer.invoke('pet-window:move', delta),
+  finishPetMove: () => ipcRenderer.invoke('pet-window:finish-move'),
+  showPetContextMenu: () => ipcRenderer.send('pet-window:context-menu'),
+  setConversationState: (state) => ipcRenderer.send('runtime:set-conversation-state', state),
+  setBubbleHasDraft: (hasDraft) => ipcRenderer.send('pet-bubble:set-has-draft', hasDraft),
+  getChatState: () => ipcRenderer.invoke('chat:get-state'),
+  sendChatMessage: (message) => ipcRenderer.invoke('chat:send-message', message),
+  stopChat: () => ipcRenderer.invoke('chat:stop'),
+  clearChat: () => ipcRenderer.invoke('chat:clear'),
+  onPetProfileChanged: (callback) => subscribe('runtime:pet-profile-changed', callback),
+  onPetStateChanged: (callback) => subscribe('runtime:pet-state-changed', callback),
+  onPreviewPetAnimation: (callback) => subscribe('runtime:preview-pet-animation', callback),
+  onSwitchPet: (callback) => subscribe('runtime:switch-pet', callback),
+  onBubbleFocus: (callback) => subscribe('pet-bubble:focus-input', callback),
+  onStopConversation: (callback) => subscribe('runtime:stop-conversation', callback),
+  onChatSnapshot: (callback) => subscribe('chat:snapshot', callback),
+  onChatChunk: (callback) => subscribe('chat:chunk', callback),
+  onChatComplete: (callback) => subscribe('chat:complete', callback),
+  onChatError: (callback) => subscribe('chat:error', callback),
+}));

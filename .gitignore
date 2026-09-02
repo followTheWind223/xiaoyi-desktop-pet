@@ -1,0 +1,11 @@
+node_modules
+dist
+release
+.vite
+src-tauri/target
+*.log
+.DS_Store
+artifacts/*-preview.png
+!artifacts/electron-desktop-preview.png
+!artifacts/overview-window-preview.png
+!artifacts/bubble-window-preview.png

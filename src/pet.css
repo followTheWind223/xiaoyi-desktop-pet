@@ -1,0 +1,50 @@
+:root {
+  font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif;
+  color: #252722;
+  background: transparent;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html, body, #pet-app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+button { font: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+.pet-stage { position: relative; display: grid; width: 100%; height: 100%; place-items: end center; padding: 42px 20px 14px; user-select: none; }
+.pet-surface { position: relative; display: grid; width: 218px; height: 246px; place-items: end center; padding: 0; overflow: visible; color: inherit; background: transparent; border: 0; cursor: grab; outline: none; touch-action: none; }
+.pet-surface:active { cursor: grabbing; }
+.pet-surface:focus-visible { border-radius: 38px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--pet-accent) 56%, white); }
+.pet-aura { display: none; }
+.pet-art { position: relative; z-index: 2; display: grid; width: 178px; height: 190px; place-items: center; transform-origin: 50% 92%; animation: pet-breathe 3.6s ease-in-out infinite; }
+.pet-art img { width: 172px; height: 172px; object-fit: cover; border: 5px solid rgba(255,255,255,.9); border-radius: 44px; box-shadow: 0 14px 28px rgba(31,36,29,.17), inset 0 0 0 1px rgba(27,32,26,.08); -webkit-user-drag: none; }
+.pet-art.sprite-art { width: 208px; height: 226px; animation: none; }
+.pet-sprite-canvas { display: block; width: 208px; height: 225px; opacity: 0; object-fit: contain; image-rendering: auto; filter: drop-shadow(0 13px 12px rgba(27,31,26,.2)); transition: opacity 120ms ease; }
+.pet-sprite-canvas.ready { opacity: 1; }
+.pet-glyph { display: grid; width: 160px; height: 160px; place-items: center; color: white; background: linear-gradient(145deg, color-mix(in srgb, var(--pet-accent) 86%, white), var(--pet-accent)); border: 6px solid rgba(255,255,255,.86); border-radius: 48px 48px 54px 54px; box-shadow: 0 14px 28px rgba(31,36,29,.18); font-size: 72px; }
+.pet-shadow { position: absolute; z-index: 1; bottom: 7px; width: 128px; height: 21px; background: rgba(31,36,29,.18); border-radius: 50%; filter: blur(8px); transform: scaleX(.86); transition: transform 180ms ease, opacity 180ms ease; }
+.pet-hover-copy { position: absolute; z-index: 4; bottom: 0; display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; opacity: 0; color: #4d554b; background: rgba(255,255,255,.88); border: 1px solid rgba(255,255,255,.92); border-radius: 999px; box-shadow: 0 6px 20px rgba(28,34,27,.12); font-size: 10px; font-weight: 600; backdrop-filter: blur(12px); pointer-events: none; transform: translateY(5px); transition: opacity 160ms ease, transform 160ms ease; }
+.pet-surface:hover .pet-hover-copy, .pet-surface:focus-visible .pet-hover-copy { opacity: 1; transform: translateY(0); }
+.pet-state-pill, .pet-hint { position: absolute; z-index: 8; bottom: 267px; display: inline-flex; align-items: center; gap: 5px; max-width: calc(100% - 24px); padding: 7px 11px; overflow: hidden; color: #394037; background: rgba(255,255,255,.9); border: 1px solid rgba(255,255,255,.94); border-radius: 999px; box-shadow: 0 8px 24px rgba(29,34,27,.13); font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; backdrop-filter: blur(14px); animation: pill-in 180ms ease-out; }
+.pet-hint { bottom: 231px; color: #665c42; background: rgba(255,250,231,.94); }
+.state-dragging .pet-art { animation: pet-lift 650ms ease-in-out infinite alternate; }
+.state-moving-right .pet-art:not(.sprite-art) { animation: pet-walk-right 520ms ease-in-out infinite alternate; }
+.state-moving-left .pet-art:not(.sprite-art) { animation: pet-walk-left 520ms ease-in-out infinite alternate; }
+.state-thinking .pet-art { animation: pet-think 900ms ease-in-out infinite; }
+.state-speaking .pet-art { animation: pet-speak 520ms ease-in-out infinite alternate; }
+.state-sleeping .pet-art { animation-duration: 5.8s; filter: saturate(.78); }
+.state-error .pet-art { animation: pet-error 420ms ease-in-out 2; }
+.state-dragging .pet-shadow { opacity: .55; transform: scaleX(.62); }
+.state-dragging .sprite-art, .state-thinking .sprite-art, .state-speaking .sprite-art, .state-sleeping .sprite-art, .state-error .sprite-art { animation: none; }
+
+@keyframes pet-breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-4px) scale(1.012); } }
+@keyframes pet-lift { from { transform: translateY(-9px) rotate(-1.5deg); } to { transform: translateY(-13px) rotate(1.5deg); } }
+@keyframes pet-walk-right { from { transform: translateY(0) rotate(-1deg); } to { transform: translateY(-5px) rotate(1.5deg); } }
+@keyframes pet-walk-left { from { transform: translateY(0) rotate(1deg); } to { transform: translateY(-5px) rotate(-1.5deg); } }
+@keyframes pet-think { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-7px) rotate(-2deg); } }
+@keyframes pet-speak { from { transform: translateY(-2px) scale(1); } to { transform: translateY(-6px) scale(1.025); } }
+@keyframes pet-error { 0%, 100% { transform: translateX(0); } 35% { transform: translateX(-5px); } 70% { transform: translateX(5px); } }
+@keyframes pill-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
