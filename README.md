@@ -13,8 +13,8 @@
 
 前往 [Releases](https://github.com/followTheWind223/xiaoyi-desktop-pet/releases/latest) 下载：
 
-- `桌宠-Setup-0.2.1-x64.exe`：推荐普通用户使用。安装向导支持选择当前用户或所有用户、自定义安装路径、创建桌面与开始菜单快捷方式。
-- `桌宠-Portable-0.2.1-x64.exe`：免安装便携版，适合临时体验和开发验证。
+- `Xiaoyi-Desktop-Pet-Setup-0.2.1-x64.exe`：推荐普通用户使用。安装向导支持选择当前用户或所有用户、自定义安装路径、创建桌面与开始菜单快捷方式。
+- `Xiaoyi-Desktop-Pet-Portable-0.2.1-x64.exe`：免安装便携版，适合临时体验和开发验证。
 
 安装目录中的 `Uninstall 桌宠.exe` 可以移除主程序、运行库和快捷方式。卸载默认保留 `%APPDATA%\桌宠` 中的角色包、模型设置和聊天历史，重新安装或升级时可继续使用。
 
