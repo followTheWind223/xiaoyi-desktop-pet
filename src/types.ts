@@ -117,6 +117,7 @@ export interface BehaviorSettings {
   alwaysOnTop: boolean;
   edgeSnap: boolean;
   startWithSystem: boolean;
+  movementEnabled: boolean;
   idleMotion: boolean;
   clickThroughShortcut: boolean;
   quietMode: boolean;

@@ -133,6 +133,21 @@ try {
     && leftWalkRow === 2
     && rightWalkRow === 1
   );
+
+  const actionPreviewFromPet = await petWindow.evaluate(() => window.desktopRuntime?.previewPetAnimation('waving'));
+  await petWindow.waitForFunction(() => (
+    document.querySelector('.pet-sprite-canvas')?.dataset.spriteAnimation === 'waving'
+  ));
+  const actionPreviewRow = await spriteCanvas.evaluate((canvas) => Number(canvas.dataset.spriteRow));
+
+  await consoleWindow.getByRole('button', { name: '桌面行为' }).click();
+  const movementSwitch = consoleWindow.getByRole('switch', { name: '允许桌宠自主移动' });
+  await movementSwitch.click();
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 420));
+  const disabledWalk = await petWindow.evaluate(() => window.desktopRuntime?.walkPet('left'));
+  const movementSettingReady = disabledWalk?.started === false && disabledWalk?.reason === 'movement-disabled';
+  await movementSwitch.click();
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 320));
   await petWindow.screenshot({ path: screenshotPath });
 
   await petWindow.getByRole('button', { name: /单击打开文字输入/ }).click();
@@ -165,6 +180,9 @@ try {
       && moveResult?.draggingRow === 4
       && moveResult?.rejectedAfterFinish === true
       && horizontalMovementReady
+      && actionPreviewFromPet === true
+      && actionPreviewRow === 3
+      && movementSettingReady
       && packagedChatErrorReady
       && unexpectedRequests.length === 0,
     executablePath,
@@ -178,6 +196,10 @@ try {
     horizontalMovementReady,
     leftWalk: { ...leftWalk, row: leftWalkRow },
     rightWalk: { ...rightWalk, row: rightWalkRow },
+    actionPreviewFromPet,
+    actionPreviewRow,
+    movementSettingReady,
+    disabledWalk,
     packagedChatErrorReady,
     unexpectedRequests,
     screenshotPath,

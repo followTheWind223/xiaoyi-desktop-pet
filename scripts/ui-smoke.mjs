@@ -68,6 +68,13 @@ await page.screenshot({ path: resolve(outputDir, '03-voice-settings.png'), fullP
 
 await page.getByRole('button', { name: '桌面行为' }).click();
 await page.getByRole('heading', { name: '控制桌宠如何停留与响应' }).waitFor();
+const movementSwitch = page.getByRole('switch', { name: '允许桌宠自主移动' });
+const autoWalkSwitch = page.getByRole('switch', { name: '待机自动散步' });
+const movementDefaultEnabled = await movementSwitch.getAttribute('aria-checked') === 'true';
+const autoWalkInitiallyAvailable = !(await autoWalkSwitch.isDisabled());
+await movementSwitch.click();
+const autoWalkDisabledWithMovement = await autoWalkSwitch.isDisabled();
+await movementSwitch.click();
 await page.screenshot({ path: resolve(outputDir, '04-behavior-settings.png'), fullPage: true });
 
 await page.setViewportSize({ width: 960, height: 640 });
@@ -87,12 +94,18 @@ const result = {
   passed: browserErrors.length === 0
     && activePetId === 'pet-xingye'
     && !storageContainsSecret
+    && movementDefaultEnabled
+    && autoWalkInitiallyAvailable
+    && autoWalkDisabledWithMovement
     && initialLayout.bodyWidth <= initialLayout.viewportWidth
     && initialLayout.contentWidth <= initialLayout.contentClientWidth
     && minimumLayout.bodyWidth <= minimumLayout.viewportWidth
     && minimumLayout.contentWidth <= minimumLayout.contentClientWidth,
   activePetId,
   storageContainsSecret,
+  movementDefaultEnabled,
+  autoWalkInitiallyAvailable,
+  autoWalkDisabledWithMovement,
   modelScrollAfterNavigation,
   modelScrollAfterTest,
   initialLayout,

@@ -95,6 +95,7 @@ const defaultBehavior: BehaviorSettings = {
   alwaysOnTop: true,
   edgeSnap: true,
   startWithSystem: false,
+  movementEnabled: true,
   idleMotion: true,
   clickThroughShortcut: true,
   quietMode: true,

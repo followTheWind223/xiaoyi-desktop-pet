@@ -54,7 +54,7 @@ interface DesktopRuntimeApi {
     started: boolean;
     direction?: 'left' | 'right';
     distance?: number;
-    reason?: 'invalid' | 'locked' | 'busy' | 'boundary' | 'forbidden' | 'unavailable'
+    reason?: 'invalid' | 'locked' | 'busy' | 'boundary' | 'forbidden' | 'unavailable' | 'movement-disabled'
       | 'click-through' | 'dragging' | 'chat-active' | 'bubble-open';
   }>;
   beginPetMove(pointer: { screenX: number; screenY: number }): Promise<{ started: boolean; reason?: 'locked' | 'invalid' }>;

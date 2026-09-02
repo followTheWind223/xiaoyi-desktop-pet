@@ -74,7 +74,7 @@ let bubbleHasDraft = false;
 let bubbleExpanded = false;
 let activePet = null;
 let pets = [];
-let behavior = { alwaysOnTop: true, edgeSnap: true, idleMotion: true };
+let behavior = { alwaysOnTop: true, edgeSnap: true, movementEnabled: true, idleMotion: true };
 let persistedPosition = null;
 let petMoveSession = null;
 let petWalkSession = null;
@@ -458,6 +458,7 @@ function sanitizeConsoleSettings(candidate) {
       alwaysOnTop: behavior.alwaysOnTop !== false,
       edgeSnap: behavior.edgeSnap !== false,
       startWithSystem: behavior.startWithSystem === true,
+      movementEnabled: behavior.movementEnabled !== false,
       idleMotion: behavior.idleMotion !== false,
       clickThroughShortcut: behavior.clickThroughShortcut !== false,
       quietMode: behavior.quietMode !== false,
@@ -1214,6 +1215,7 @@ function canStartPetWalk(automatic) {
     && !petMoveSession
     && !activeChatRequest
     && !bubbleWindow?.isVisible()
+    && behavior.movementEnabled !== false
     && (!automatic || behavior.idleMotion !== false),
   );
 }
@@ -1222,6 +1224,7 @@ function petWalkBlockedReason() {
   if (!petWindow || petWindow.isDestroyed() || !petWindow.isVisible()) return 'unavailable';
   if (runtimeState.locked) return 'locked';
   if (runtimeState.clickThrough) return 'click-through';
+  if (behavior.movementEnabled === false) return 'movement-disabled';
   if (runtimeState.uiState !== 'idle') return 'busy';
   if (petMoveSession) return 'dragging';
   if (activeChatRequest) return 'chat-active';
@@ -1277,7 +1280,7 @@ function startPetWalk(direction, options = {}) {
       stopPetWalk(false);
       return;
     }
-    if (runtimeState.locked || runtimeState.clickThrough || activeChatRequest || bubbleWindow?.isVisible()) {
+    if (runtimeState.locked || runtimeState.clickThrough || behavior.movementEnabled === false || activeChatRequest || bubbleWindow?.isVisible()) {
       stopPetWalk();
       return;
     }
@@ -1292,7 +1295,7 @@ function startPetWalk(direction, options = {}) {
 
 function scheduleIdleWalk(delayMs) {
   clearIdleWalkTimer();
-  if (behavior.idleMotion === false || runtimeState.uiState !== 'idle') return;
+  if (behavior.movementEnabled === false || behavior.idleMotion === false || runtimeState.uiState !== 'idle') return;
   const delay = Number.isFinite(delayMs) ? Number(delayMs) : 12000 + Math.round(Math.random() * 12000);
   idleWalkTimer = setTimeout(() => {
     idleWalkTimer = null;
@@ -1543,6 +1546,16 @@ function activatePetFromMain(id) {
   void rebuildTrayMenu();
 }
 
+function previewPetAnimationFromMain(animationId) {
+  if (typeof animationId !== 'string' || !activePet?.sprite) return false;
+  const animation = activePet.sprite.animations.find((item) => item.id === animationId);
+  if (!animation) return false;
+  stopPetWalk();
+  showPetWindow();
+  petWindow?.webContents.send('runtime:preview-pet-animation', animation);
+  return true;
+}
+
 function showPetContextMenu() {
   if (!petWindow) return;
   const isBusy = runtimeState.uiState === 'thinking' || runtimeState.uiState === 'speaking';
@@ -1552,6 +1565,10 @@ function showPetContextMenu() {
     checked: pet.id === activePet?.id,
     click: () => activatePetFromMain(pet.id),
   }));
+  const animationItems = activePet?.sprite?.animations?.map((animation) => ({
+    label: animation.label,
+    click: () => previewPetAnimationFromMain(animation.id),
+  })) ?? [];
   const menu = Menu.buildFromTemplate([
     { label: '输入文字', accelerator: 'Ctrl+Alt+Enter', click: showBubbleWindow },
     { label: '开始语音对话（待接入）', enabled: false },
@@ -1563,12 +1580,17 @@ function showPetContextMenu() {
       },
     },
     {
-      label: '移动一下',
-      enabled: !runtimeState.locked && !isBusy,
+      label: behavior.movementEnabled === false ? '移动一下（已关闭）' : '移动一下',
+      enabled: behavior.movementEnabled !== false && !runtimeState.locked && !isBusy,
       submenu: [
         { label: '向左走', click: () => startPetWalk('left', { distance: 72, speed: 54 }) },
         { label: '向右走', click: () => startPetWalk('right', { distance: 72, speed: 54 }) },
       ],
+    },
+    {
+      label: '展示动作',
+      enabled: !isBusy && animationItems.length > 0,
+      submenu: animationItems.length ? animationItems : [{ label: '当前角色没有可用动作', enabled: false }],
     },
     { type: 'separator' },
     { label: '切换桌宠', submenu: switchItems.length ? switchItems : [{ label: '暂无桌宠', enabled: false }] },
@@ -1705,11 +1727,12 @@ function registerIpc() {
     behavior = {
       alwaysOnTop: payload.behavior?.alwaysOnTop !== false,
       edgeSnap: payload.behavior?.edgeSnap !== false,
+      movementEnabled: payload.behavior?.movementEnabled !== false,
       idleMotion: payload.behavior?.idleMotion !== false,
     };
     runtimeState.alwaysOnTop = behavior.alwaysOnTop;
     petWindow?.setAlwaysOnTop(runtimeState.alwaysOnTop, 'floating');
-    if (behavior.idleMotion === false) stopPetWalk();
+    if (behavior.movementEnabled === false || behavior.idleMotion === false) stopPetWalk();
     else if (runtimeState.uiState === 'idle') scheduleIdleWalk();
     broadcastProfile();
     broadcastState();
@@ -1733,12 +1756,8 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle('runtime:preview-pet-animation', (event, animationId) => {
-    if (!isSender(event, mainWindow) || typeof animationId !== 'string' || !activePet?.sprite) return false;
-    const animation = activePet.sprite.animations.find((item) => item.id === animationId);
-    if (!animation) return false;
-    showPetWindow();
-    petWindow?.webContents.send('runtime:preview-pet-animation', animation);
-    return true;
+    if (!isKnownSender(event)) return false;
+    return previewPetAnimationFromMain(animationId);
   });
   ipcMain.handle('pet-window:show', (event) => (isKnownSender(event) ? showPetWindow() : false));
   ipcMain.handle('pet-window:hide', (event) => (isKnownSender(event) ? hidePetWindow() : false));

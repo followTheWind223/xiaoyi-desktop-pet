@@ -14,7 +14,7 @@ function resetPetPosition() {
 <template>
   <section class="page settings-page">
     <div class="page-heading">
-      <div><span class="eyebrow">桌面行为</span><h1>控制桌宠如何停留与响应</h1><p>配置置顶、拖拽、吸附、点击穿透和待机动作。</p></div>
+      <div><span class="eyebrow">桌面行为</span><h1>控制桌宠如何停留与响应</h1><p>配置置顶、拖拽、自主移动、点击穿透和待机动作。</p></div>
       <button class="secondary-button" type="button" :disabled="!desktopAvailable" @click="resetPetPosition"><Crosshair :size="16" aria-hidden="true" />重置桌宠位置</button>
     </div>
 
@@ -30,15 +30,16 @@ function resetPetPosition() {
       </article>
 
       <article class="settings-card">
-        <div class="card-heading"><div><h2>交互与动作</h2><p>动作只用于反馈，不打断用户工作。</p></div><Sparkles :size="19" /></div>
+        <div class="card-heading"><div><h2>交互与动作</h2><p>分别控制位置调整、自动散步和动作展示。</p></div><Sparkles :size="19" /></div>
         <div class="interaction-cheatsheet">
           <div><MousePointer2 :size="17" /><span><strong>单击</strong>展开文字输入</span></div>
           <div><Move :size="17" /><span><strong>长按拖动</strong>移动桌宠</span></div>
-          <div><MousePointer2 :size="17" /><span><strong>右键</strong>快捷菜单与设置</span></div>
+          <div><MousePointer2 :size="17" /><span><strong>右键</strong>展示动作与快捷设置</span></div>
           <div><Keyboard :size="17" /><span><strong>Ctrl + Alt + Space</strong>开始语音</span></div>
         </div>
         <div class="switch-stack compact">
-          <UiSwitch v-model="store.behavior.idleMotion" label="自然待机动作" description="呼吸、眨眼、观察和低频特殊动作" />
+          <UiSwitch v-model="store.behavior.movementEnabled" label="允许桌宠自主移动" description="允许角色使用左右动作在屏幕上行走；关闭后仍可手动拖拽" />
+          <UiSwitch v-model="store.behavior.idleMotion" label="待机自动散步" description="空闲时低频随机向左或向右移动" :disabled="!store.behavior.movementEnabled" />
         </div>
       </article>
     </div>

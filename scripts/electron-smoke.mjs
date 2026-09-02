@@ -288,6 +288,32 @@ try {
     )),
   );
 
+  const actionPreviewFromPet = await petWindow.evaluate(() => window.desktopRuntime?.previewPetAnimation('waving'));
+  await petWindow.waitForFunction(() => (
+    document.querySelector('.pet-sprite-canvas')?.dataset.spriteAnimation === 'waving'
+  ));
+  const actionPreviewRow = await spriteCanvas.evaluate((canvas) => Number(canvas.dataset.spriteRow));
+
+  await window.getByRole('button', { name: '桌面行为' }).click();
+  const movementSwitch = window.getByRole('switch', { name: '允许桌宠自主移动' });
+  const movementEnabledByDefault = await movementSwitch.getAttribute('aria-checked') === 'true';
+  await movementSwitch.click();
+  await new Promise((resolve) => setTimeout(resolve, 420));
+  const disabledWalk = await petWindow.evaluate(() => window.desktopRuntime?.walkPet('left'));
+  const dragWhileMovementDisabled = await petWindow.evaluate(async () => {
+    const started = await window.desktopRuntime?.beginPetMove({ screenX: 500, screenY: 500 });
+    await window.desktopRuntime?.finishPetMove();
+    return started;
+  });
+  const movementSettingReady = movementEnabledByDefault
+    && disabledWalk?.started === false
+    && disabledWalk?.reason === 'movement-disabled'
+    && dragWhileMovementDisabled?.started === true;
+  await movementSwitch.click();
+  await new Promise((resolve) => setTimeout(resolve, 320));
+  await window.getByRole('button', { name: '桌宠管理' }).click();
+  await window.getByRole('heading', { name: '选择今天陪伴你的角色' }).waitFor();
+
   await petWindow.getByRole('button', { name: /单击打开文字输入/ }).click();
   await bubbleWindow.getByPlaceholder('输入消息…').waitFor({ state: 'visible' });
   const compactBubbleBounds = await electronApp.evaluate(({ BrowserWindow }) => (
@@ -363,6 +389,9 @@ try {
       && longPressReleaseStable
       && longPressGeometryStable
       && horizontalMovementReady
+      && actionPreviewFromPet === true
+      && actionPreviewRow === 3
+      && movementSettingReady
       && petInteractionReady
       && speakingRow === 8
       && mockRequestCount >= 3
@@ -395,6 +424,11 @@ try {
     horizontalWalkBounds: { start: walkStartBounds, left: afterLeftWalkBounds, right: afterRightWalkBounds },
     afterLeftWalkState: afterLeftWalkState?.runtime,
     bubbleVisibleBeforeRight,
+    actionPreviewFromPet,
+    actionPreviewRow,
+    movementSettingReady,
+    disabledWalk,
+    dragWhileMovementDisabled,
     longPressGeometryStable,
     longPressBounds: { before: longPressBefore, during: longPressDuring, after: longPressAfter },
     petInteractionReady,

@@ -62,7 +62,11 @@ try {
   await session.consoleWindow.locator('input[name="llm-api-key"]').fill(secret);
   await session.consoleWindow.getByRole('button', { name: '安全保存 API Key' }).click();
   await session.consoleWindow.getByText('API Key 已使用当前 Windows 账户加密保存', { exact: true }).waitFor();
+  await session.consoleWindow.getByRole('button', { name: '桌面行为' }).click();
+  const movementSwitch = session.consoleWindow.getByRole('switch', { name: '允许桌宠自主移动' });
+  await movementSwitch.click();
   await session.consoleWindow.getByText('已保存到本机', { exact: true }).waitFor();
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 350));
   await session.consoleWindow.screenshot({ path: screenshotPath });
   await session.app.close();
   electronApp = undefined;
@@ -81,6 +85,11 @@ try {
   const restoredProfileName = await session.consoleWindow.locator('input[name="llm-profile-name"]').inputValue();
   const restoredApiKeyDraft = await session.consoleWindow.locator('input[name="llm-api-key"]').inputValue();
   await session.consoleWindow.getByText('已使用当前 Windows 账户加密保存', { exact: true }).waitFor();
+  await session.consoleWindow.getByRole('button', { name: '桌面行为' }).click();
+  const restoredMovementEnabled = await session.consoleWindow
+    .getByRole('switch', { name: '允许桌宠自主移动' })
+    .getAttribute('aria-checked');
+  await session.consoleWindow.getByRole('button', { name: '模型连接' }).click();
   session.consoleWindow.once('dialog', (dialog) => dialog.accept());
   await session.consoleWindow.getByRole('button', { name: '移除已保存密钥' }).click();
   await session.consoleWindow.getByText('已移除本机保存的 API Key', { exact: true }).waitFor();
@@ -90,13 +99,16 @@ try {
   const result = {
     passed: settingsJson.version === 1
       && settingsJson.settings?.llm?.profileName === profileName
+      && settingsJson.settings?.behavior?.movementEnabled === false
       && restoredProfileName === profileName
+      && restoredMovementEnabled === 'false'
       && restoredApiKeyDraft === ''
       && plaintextAbsent
       && !existsSync(secretPath),
     packaged,
     settingsVersion: settingsJson.version,
     restoredProfileName,
+    restoredMovementEnabled: restoredMovementEnabled === 'true',
     restoredApiKeyDraftEmpty: restoredApiKeyDraft === '',
     plaintextAbsent,
     encryptedSecretRemoved: !existsSync(secretPath),
