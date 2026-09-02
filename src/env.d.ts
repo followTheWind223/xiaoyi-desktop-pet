@@ -76,7 +76,10 @@ interface DesktopRuntimeApi {
   onPetStateChanged(callback: (state: RuntimePetState) => void): DisposeListener;
   onPreviewPetAnimation(callback: (animation: CharacterAnimationDefinition) => void): DisposeListener;
   onSwitchPet(callback: (id: string) => void): DisposeListener;
-  onBehaviorSettingChanged(callback: (payload: { key: 'speechBubbleSeconds' | 'petScale'; value: number }) => void): DisposeListener;
+  onBehaviorSettingChanged(callback: (payload:
+    | { key: 'speechBubbleSeconds' | 'petScale'; value: number }
+    | { key: 'movementEnabled'; value: boolean }
+  ) => void): DisposeListener;
   onQuickInputClose(callback: () => void): DisposeListener;
   onNavigateSection(callback: (section: SectionKey) => void): DisposeListener;
   onBubbleFocus(callback: () => void): DisposeListener;

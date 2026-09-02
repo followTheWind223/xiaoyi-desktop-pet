@@ -320,6 +320,7 @@ try {
   await movementSwitch.click();
   await new Promise((resolve) => setTimeout(resolve, 420));
   const disabledWalk = await petWindow.evaluate(() => window.desktopRuntime?.walkPet('left'));
+  const disabledMovementState = await petWindow.evaluate(() => window.desktopRuntime?.getDesktopSnapshot());
   const dragWhileMovementDisabled = await petWindow.evaluate(async () => {
     const started = await window.desktopRuntime?.beginPetMove({ screenX: 500, screenY: 500 });
     await window.desktopRuntime?.finishPetMove();
@@ -328,9 +329,12 @@ try {
   const movementSettingReady = movementEnabledByDefault
     && disabledWalk?.started === false
     && disabledWalk?.reason === 'movement-disabled'
+    && disabledMovementState?.runtime?.movementEnabled === false
     && dragWhileMovementDisabled?.started === true;
   await movementSwitch.click();
   await new Promise((resolve) => setTimeout(resolve, 320));
+  const enabledMovementState = await petWindow.evaluate(() => window.desktopRuntime?.getDesktopSnapshot());
+  const movementStateSyncReady = enabledMovementState?.runtime?.movementEnabled === true;
   const scaleSlider = window.locator('input[name="pet-scale"]');
   const beforeScaleBounds = await electronApp.evaluate(({ BrowserWindow }) => (
     BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠')?.getBounds()
@@ -473,6 +477,7 @@ try {
       && actionPreviewFromPet === true
       && actionPreviewRow === 3
       && movementSettingReady
+      && movementStateSyncReady
       && petScaleSettingReady
       && petInteractionReady
       && thinkingRow === 6
@@ -516,6 +521,7 @@ try {
     actionPreviewFromPet,
     actionPreviewRow,
     movementSettingReady,
+    movementStateSyncReady,
     petScaleSettingReady,
     scaleBounds: { before: beforeScaleBounds, scaled: scaledBounds, rendered: scaledPet.renderedScale },
     disabledWalk,

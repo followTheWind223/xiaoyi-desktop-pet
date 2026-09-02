@@ -145,9 +145,14 @@ try {
   await movementSwitch.click();
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 420));
   const disabledWalk = await petWindow.evaluate(() => window.desktopRuntime?.walkPet('left'));
-  const movementSettingReady = disabledWalk?.started === false && disabledWalk?.reason === 'movement-disabled';
+  const disabledMovementState = await petWindow.evaluate(() => window.desktopRuntime?.getDesktopSnapshot());
+  const movementSettingReady = disabledWalk?.started === false
+    && disabledWalk?.reason === 'movement-disabled'
+    && disabledMovementState?.runtime?.movementEnabled === false;
   await movementSwitch.click();
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 320));
+  const enabledMovementState = await petWindow.evaluate(() => window.desktopRuntime?.getDesktopSnapshot());
+  const movementStateSyncReady = enabledMovementState?.runtime?.movementEnabled === true;
   await petWindow.screenshot({ path: screenshotPath });
 
   await petWindow.getByRole('button', { name: /单击打开快捷输入/ }).click();
@@ -206,6 +211,7 @@ try {
       && actionPreviewFromPet === true
       && actionPreviewRow === 3
       && movementSettingReady
+      && movementStateSyncReady
       && packagedChatErrorReady
       && unexpectedRequests.length === 0,
     executablePath,
@@ -222,6 +228,7 @@ try {
     actionPreviewFromPet,
     actionPreviewRow,
     movementSettingReady,
+    movementStateSyncReady,
     disabledWalk,
     packagedChatErrorReady,
     quickInputBubbleHidden,

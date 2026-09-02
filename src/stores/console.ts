@@ -508,10 +508,12 @@ export const useConsoleStore = defineStore('console', () => {
     }
   });
   desktopRuntime?.onBehaviorSettingChanged(({ key, value }) => {
-    if (key === 'speechBubbleSeconds' && Number.isFinite(value)) {
+    if (key === 'speechBubbleSeconds' && typeof value === 'number' && Number.isFinite(value)) {
       behavior.value.speechBubbleSeconds = value;
-    } else if (key === 'petScale' && Number.isFinite(value)) {
+    } else if (key === 'petScale' && typeof value === 'number' && Number.isFinite(value)) {
       behavior.value.petScale = value;
+    } else if (key === 'movementEnabled' && typeof value === 'boolean') {
+      behavior.value.movementEnabled = value;
     }
   });
   if (desktopRuntime) void initializeDesktopSettings();

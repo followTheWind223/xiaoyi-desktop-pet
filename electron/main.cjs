@@ -1154,6 +1154,7 @@ function safeDesktopSnapshot() {
     runtime: {
       ...runtimeState,
       visible: Boolean(petWindow?.isVisible()),
+      movementEnabled: behavior.movementEnabled !== false,
       petScale: behavior.petScale,
       speechBubbleSeconds: behavior.speechBubbleSeconds,
     },
@@ -1631,6 +1632,24 @@ function setPetScale(candidate) {
   return scale;
 }
 
+function setMovementEnabled(candidate) {
+  const enabled = candidate !== false;
+  if (behavior.movementEnabled === enabled) return enabled;
+  behavior.movementEnabled = enabled;
+  if (!enabled) stopPetWalk();
+  else if (behavior.idleMotion && runtimeState.uiState === 'idle') scheduleIdleWalk(1200);
+  broadcastState();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('runtime:behavior-setting-changed', { key: 'movementEnabled', value: enabled });
+  }
+  const settings = loadConsoleSettings();
+  if (settings) {
+    settings.behavior.movementEnabled = enabled;
+    void saveConsoleSettings(settings);
+  }
+  return enabled;
+}
+
 function hideBubbleWindow() {
   bubbleWindow?.hide();
   bubbleHasDraft = false;
@@ -1681,6 +1700,10 @@ function showPetContextMenu() {
       click: () => {
         stopActiveChat();
       },
+    },
+    {
+      label: behavior.movementEnabled === false ? '允许角色移动' : '停止角色移动',
+      click: () => setMovementEnabled(behavior.movementEnabled === false),
     },
     {
       label: behavior.movementEnabled === false ? '移动一下（已关闭）' : '移动一下',

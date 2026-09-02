@@ -189,6 +189,7 @@ export interface RuntimePetState {
   muted: boolean;
   wakePaused: boolean;
   alwaysOnTop: boolean;
+  movementEnabled: boolean;
   petScale: number;
   speechBubbleSeconds: number;
 }
