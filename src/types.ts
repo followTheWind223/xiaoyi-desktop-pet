@@ -90,6 +90,15 @@ export interface ChatSnapshot {
   activeRequest: { id: string; status: 'thinking' | 'speaking'; partial: string } | null;
 }
 
+export interface CharacterMemoryOverview {
+  petId: string;
+  recentMessages: number;
+  summaryChars: number;
+  compressedMessages: number;
+  updatedAt: string | null;
+  status: 'collecting' | 'compressing' | 'ready';
+}
+
 export interface ChatSendResult {
   started: boolean;
   requestId?: string;

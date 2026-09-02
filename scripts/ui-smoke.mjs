@@ -79,6 +79,12 @@ const autoWalkDisabledWithMovement = await autoWalkSwitch.isDisabled();
 await movementSwitch.click();
 await page.screenshot({ path: resolve(outputDir, '04-behavior-settings.png'), fullPage: true });
 
+await page.getByRole('button', { name: '对话与数据' }).click();
+await page.getByRole('heading', { name: '每个角色都有自己的记忆' }).waitFor();
+const memoryRows = await page.locator('.data-pet-list > div').count();
+const roleMemoryCopyReady = await page.getByText('独立记忆空间').first().isVisible();
+await page.screenshot({ path: resolve(outputDir, '05-character-memory.png'), fullPage: true });
+
 await page.setViewportSize({ width: 960, height: 640 });
 await page.getByRole('button', { name: '桌宠管理' }).click();
 await page.getByRole('heading', { name: '选择今天陪伴你的角色' }).waitFor();
@@ -101,6 +107,8 @@ const result = {
     && autoWalkDisabledWithMovement
     && speechBubbleSeconds === '10'
     && petScale === '1'
+    && memoryRows >= 3
+    && roleMemoryCopyReady
     && initialLayout.bodyWidth <= initialLayout.viewportWidth
     && initialLayout.contentWidth <= initialLayout.contentClientWidth
     && minimumLayout.bodyWidth <= minimumLayout.viewportWidth
@@ -112,6 +120,8 @@ const result = {
   autoWalkDisabledWithMovement,
   speechBubbleSeconds: Number(speechBubbleSeconds),
   petScale: Number(petScale),
+  memoryRows,
+  roleMemoryCopyReady,
   modelScrollAfterNavigation,
   modelScrollAfterTest,
   initialLayout,

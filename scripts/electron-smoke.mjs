@@ -15,8 +15,20 @@ const petScreenshotPath = resolve('artifacts', 'pet-window-preview.png');
 const bubbleScreenshotPath = resolve('artifacts', 'bubble-window-preview.png');
 const bubbleInputScreenshotPath = resolve('artifacts', 'bubble-input-preview.png');
 const unexpectedRequests = [];
+const modelPayloads = [];
 let electronApp;
 let mockRequestCount = 0;
+
+async function waitForChatIdle(targetWindow, timeoutMs = 7000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const snapshot = await targetWindow.evaluate(() => window.desktopRuntime?.getChatState());
+    if (snapshot?.activeRequest === null) return snapshot;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  throw new Error('等待聊天请求结束超时');
+}
+
 const mockServer = createServer((request, response) => {
   let rawBody = '';
   request.setEncoding('utf8');
@@ -34,6 +46,7 @@ const mockServer = createServer((request, response) => {
     let payload;
     try {
       payload = JSON.parse(rawBody);
+      modelPayloads.push(payload);
     } catch {
       response.writeHead(400, { 'Content-Type': 'application/json' });
       response.end('{}');
@@ -133,6 +146,7 @@ try {
   await remCard.waitFor();
   await remCard.getByRole('button', { name: /切换/ }).click();
   await window.getByText(/已切换到 Rem/).waitFor();
+  const remPetId = await petWindow.evaluate(async () => (await window.desktopRuntime?.getDesktopSnapshot())?.activePet.id);
   const remDescription = await window.locator('textarea[name="pet-personality"]').inputValue();
   const animationButtons = window.locator('.motion-tile');
   await animationButtons.first().waitFor();
@@ -441,6 +455,78 @@ try {
   const stoppedChat = await bubbleWindow.evaluate(() => window.desktopRuntime?.getChatState());
   const stopConversationReady = stoppedChat?.activeRequest === null;
 
+  const initialMemoryOverview = await window.evaluate(() => window.desktopRuntime?.getCharacterMemoryOverview());
+  const initialRemMessages = initialMemoryOverview?.find((item) => item.petId === remPetId)?.recentMessages ?? 0;
+  const turnsUntilCompression = Math.max(0, Math.ceil((28 - initialRemMessages) / 2));
+  for (let index = 0; index < turnsUntilCompression; index += 1) {
+    let sent;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      sent = await petWindow.evaluate((message) => window.desktopRuntime?.sendChatMessage(message), `记忆压缩样本 ${index + 1}`);
+      if (sent?.started || sent?.error !== 'busy') break;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+    }
+    if (!sent?.started) throw new Error(`记忆压缩样本发送失败：${sent?.error ?? 'unknown'}`);
+    await waitForChatIdle(petWindow);
+  }
+  let compressedMemoryOverview;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    compressedMemoryOverview = await window.evaluate(() => window.desktopRuntime?.getCharacterMemoryOverview());
+    const memory = compressedMemoryOverview?.find((item) => item.petId === remPetId);
+    if (memory?.status === 'ready' && memory.compressedMessages >= 12 && memory.recentMessages <= 16) break;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  const memoryHistoryAfterCompression = JSON.parse(readFileSync(chatHistoryFile, 'utf8'));
+  const persistedRemMemory = memoryHistoryAfterCompression.conversations
+    ?.find((item) => item.petId === remPetId)?.memory;
+  const memoryPersistenceReady = memoryHistoryAfterCompression.version === 2
+    && typeof persistedRemMemory?.summary === 'string'
+    && persistedRemMemory.summary.length > 0;
+
+  let memoryProbe;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    memoryProbe = await petWindow.evaluate(() => window.desktopRuntime?.sendChatMessage('记忆注入验证'));
+    if (memoryProbe?.started || memoryProbe?.error !== 'busy') break;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  if (!memoryProbe?.started) throw new Error(`记忆注入验证发送失败：${memoryProbe?.error ?? 'unknown'}`);
+  await waitForChatIdle(petWindow);
+  const remMemoryPayload = modelPayloads.findLast((payload) => payload.messages?.some((message) => (
+    message.role === 'user' && message.content === '记忆注入验证'
+  )));
+  const remMemoryInjected = remMemoryPayload?.messages?.some((message) => (
+    message.role === 'system' && message.content.includes('专属长期记忆') && message.content.includes('OK')
+  ));
+
+  await window.getByRole('button', { name: '桌宠管理' }).click();
+  await window.locator('.pet-list-card').filter({ hasText: '星野' }).getByRole('button', { name: /切换/ }).click();
+  await window.getByText(/已切换到 星野/).waitFor();
+  let isolatedProbe;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    isolatedProbe = await petWindow.evaluate(() => window.desktopRuntime?.sendChatMessage('角色隔离验证'));
+    if (isolatedProbe?.started || isolatedProbe?.error !== 'busy') break;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  if (!isolatedProbe?.started) throw new Error(`角色隔离验证发送失败：${isolatedProbe?.error ?? 'unknown'}`);
+  await waitForChatIdle(petWindow);
+  const xingyePayload = modelPayloads.findLast((payload) => payload.messages?.some((message) => (
+    message.role === 'user' && message.content === '角色隔离验证'
+  )));
+  const roleMemoryIsolationReady = !xingyePayload?.messages?.some((message) => (
+    message.role === 'system' && message.content.includes('专属长期记忆')
+  ));
+  const beforeMemoryClear = await window.evaluate(() => window.desktopRuntime?.getCharacterMemoryOverview());
+  const remBeforeClear = beforeMemoryClear?.find((item) => item.petId === remPetId);
+  const xingyeBeforeClear = beforeMemoryClear?.find((item) => item.petId === 'pet-xingye');
+  const clearedRemMemory = await window.evaluate((petId) => window.desktopRuntime?.clearCharacterMemory(petId), remPetId);
+  const afterMemoryClear = await window.evaluate(() => window.desktopRuntime?.getCharacterMemoryOverview());
+  const remAfterClear = afterMemoryClear?.find((item) => item.petId === remPetId);
+  const xingyeAfterClear = afterMemoryClear?.find((item) => item.petId === 'pet-xingye');
+  const characterMemoryClearReady = clearedRemMemory === true
+    && (remBeforeClear?.summaryChars ?? 0) > 0
+    && remAfterClear?.summaryChars === 0
+    && remAfterClear.recentMessages === remBeforeClear.recentMessages
+    && xingyeAfterClear?.recentMessages === xingyeBeforeClear?.recentMessages;
+
   await window.screenshot({ path: screenshotPath });
 
   const result = {
@@ -487,6 +573,10 @@ try {
       && chatRecoveredAfterHide
       && chatHistorySafe
       && stopConversationReady
+      && memoryPersistenceReady
+      && remMemoryInjected
+      && roleMemoryIsolationReady
+      && characterMemoryClearReady
       && unexpectedRequests.length === 0,
     runtime,
     characterScan: characterScan && {
@@ -538,6 +628,11 @@ try {
     chatRecoveredAfterHide,
     chatHistorySafe,
     stopConversationReady,
+    compressedMemoryOverview,
+    memoryPersistenceReady,
+    remMemoryInjected,
+    roleMemoryIsolationReady,
+    characterMemoryClearReady,
     unexpectedRequests,
     screenshotPath,
     overviewScreenshotPath,

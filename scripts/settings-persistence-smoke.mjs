@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -20,6 +21,7 @@ const executablePath = packaged
 const profileDir = mkdtempSync(join(tmpdir(), 'desktop-pet-settings-smoke-'));
 const settingsPath = join(profileDir, 'desktop-pet-data', 'console-settings.json');
 const secretPath = join(profileDir, 'desktop-pet-data', 'model-api-key.bin');
+const chatHistoryPath = join(profileDir, 'desktop-pet-data', 'chat-history.json');
 const screenshotPath = resolve('artifacts', `model-settings-${packaged ? 'packaged' : 'dev'}-preview.png`);
 const profileName = '持久化回归配置';
 const secret = 'settings-secret-never-persist';
@@ -91,8 +93,29 @@ try {
   const plaintextAbsent = !settingsBytes.includes(Buffer.from(secret, 'utf8'))
     && !secretBytes.includes(Buffer.from(secret, 'utf8'));
 
+  const memoryTimestamp = new Date().toISOString();
+  writeFileSync(chatHistoryPath, `${JSON.stringify({
+    version: 2,
+    updatedAt: memoryTimestamp,
+    conversations: [
+      {
+        petId: 'character-package:rem--l1',
+        messages: [{ id: 'rem-recent-1', role: 'user', content: 'Rem 的近期消息', createdAt: memoryTimestamp }],
+        memory: { summary: 'Rem 只记得用户喜欢冰淇淋。', updatedAt: memoryTimestamp, compressedMessages: 12, revision: 1 },
+      },
+      {
+        petId: 'pet-xingye',
+        messages: [{ id: 'xingye-recent-1', role: 'user', content: '星野的近期消息', createdAt: memoryTimestamp }],
+        memory: { summary: '星野只记得用户喜欢夜空。', updatedAt: memoryTimestamp, compressedMessages: 18, revision: 2 },
+      },
+    ],
+  }, null, 2)}\n`, 'utf8');
+
   session = await launch();
   electronApp = session.app;
+  const restoredMemoryOverview = await session.consoleWindow.evaluate(() => window.desktopRuntime?.getCharacterMemoryOverview());
+  const restoredRemMemory = restoredMemoryOverview?.find((item) => item.petId === 'character-package:rem--l1');
+  const restoredXingyeMemory = restoredMemoryOverview?.find((item) => item.petId === 'pet-xingye');
   await session.consoleWindow.getByRole('button', { name: '模型连接' }).click();
   const restoredProfileName = await session.consoleWindow.locator('input[name="llm-profile-name"]').inputValue();
   const restoredApiKeyDraft = await session.consoleWindow.locator('input[name="llm-api-key"]').inputValue();
@@ -123,6 +146,12 @@ try {
       && restoredSpeechBubbleSeconds === '20'
       && restoredPetScale === '1.15'
       && restoredApiKeyDraft === ''
+      && restoredRemMemory?.status === 'ready'
+      && restoredRemMemory.compressedMessages === 12
+      && restoredRemMemory.recentMessages === 1
+      && restoredXingyeMemory?.status === 'ready'
+      && restoredXingyeMemory.compressedMessages === 18
+      && restoredXingyeMemory.recentMessages === 1
       && plaintextAbsent
       && !existsSync(secretPath),
     packaged,
@@ -132,6 +161,7 @@ try {
     restoredSpeechBubbleSeconds: Number(restoredSpeechBubbleSeconds),
     restoredPetScale: Number(restoredPetScale),
     restoredApiKeyDraftEmpty: restoredApiKeyDraft === '',
+    restoredCharacterMemories: restoredMemoryOverview?.filter((item) => item.status === 'ready'),
     plaintextAbsent,
     encryptedSecretRemoved: !existsSync(secretPath),
     screenshotPath,

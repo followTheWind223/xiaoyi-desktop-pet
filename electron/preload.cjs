@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld('desktopRuntime', Object.freeze({
   sendChatMessage: (message) => ipcRenderer.invoke('chat:send-message', message),
   stopChat: () => ipcRenderer.invoke('chat:stop'),
   clearChat: () => ipcRenderer.invoke('chat:clear'),
+  getCharacterMemoryOverview: () => ipcRenderer.invoke('chat:get-memory-overview'),
+  clearCharacterMemory: (petId) => ipcRenderer.invoke('chat:clear-character-memory', petId),
   onPetProfileChanged: (callback) => subscribe('runtime:pet-profile-changed', callback),
   onPetStateChanged: (callback) => subscribe('runtime:pet-state-changed', callback),
   onPreviewPetAnimation: (callback) => subscribe('runtime:preview-pet-animation', callback),
@@ -56,4 +58,5 @@ contextBridge.exposeInMainWorld('desktopRuntime', Object.freeze({
   onChatChunk: (callback) => subscribe('chat:chunk', callback),
   onChatComplete: (callback) => subscribe('chat:complete', callback),
   onChatError: (callback) => subscribe('chat:error', callback),
+  onCharacterMemoryOverviewChanged: (callback) => subscribe('chat:memory-overview-changed', callback),
 }));

@@ -162,7 +162,7 @@ function retryLastMessage() {
 
 async function clearConversation() {
   if (busy.value || !messages.value.length) return;
-  if (!window.confirm(`清空与 ${title.value} 的最近对话吗？此操作无法撤销。`)) return;
+  if (!window.confirm(`清空与 ${title.value} 的近期对话和长期记忆吗？其他角色不受影响，此操作无法撤销。`)) return;
   if (await window.desktopRuntime?.clearChat()) {
     messages.value = [];
     pendingReply.value = '';

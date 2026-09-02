@@ -3,6 +3,7 @@
 import type {
   BehaviorSettings,
   CharacterAnimationDefinition,
+  CharacterMemoryOverview,
   CharacterPackageScanResult,
   ChatErrorCode,
   ChatMessage,
@@ -72,6 +73,8 @@ interface DesktopRuntimeApi {
   sendChatMessage(message: string): Promise<ChatSendResult>;
   stopChat(): Promise<boolean>;
   clearChat(): Promise<boolean>;
+  getCharacterMemoryOverview(): Promise<CharacterMemoryOverview[]>;
+  clearCharacterMemory(petId: string): Promise<boolean>;
   onPetProfileChanged(callback: (pet: PetProfile) => void): DisposeListener;
   onPetStateChanged(callback: (state: RuntimePetState) => void): DisposeListener;
   onPreviewPetAnimation(callback: (animation: CharacterAnimationDefinition) => void): DisposeListener;
@@ -88,6 +91,7 @@ interface DesktopRuntimeApi {
   onChatChunk(callback: (payload: { requestId: string; delta: string }) => void): DisposeListener;
   onChatComplete(callback: (payload: { requestId: string; message: ChatMessage }) => void): DisposeListener;
   onChatError(callback: (payload: { requestId: string; code: ChatErrorCode; message?: ChatMessage }) => void): DisposeListener;
+  onCharacterMemoryOverviewChanged(callback: (overview: CharacterMemoryOverview[]) => void): DisposeListener;
 }
 
 declare global {

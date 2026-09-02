@@ -4,7 +4,7 @@
   "description": "本地优先、支持动态角色包的 Windows 桌面伙伴",
   "author": "Desktop Pet Team",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.4.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/followTheWind223/xiaoyi-desktop-pet.git"
