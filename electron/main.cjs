@@ -48,8 +48,8 @@ const DEFAULT_HATCH_ANIMATIONS = [
   { id: 'waving', label: '挥手', row: 3, mode: 'once', states: ['hover', 'input_open'] },
   { id: 'jumping', label: '跳跃', row: 4, mode: 'loop', states: ['dragging'] },
   { id: 'failed', label: '失败', row: 5, mode: 'once', states: ['error'] },
-  { id: 'waiting', label: '等待', row: 6, mode: 'loop', states: ['listening', 'transcribing', 'sleeping'] },
-  { id: 'running', label: '奔跑 / 工作', row: 7, mode: 'loop', states: ['thinking'] },
+  { id: 'waiting', label: '等待', row: 6, mode: 'loop', states: ['listening', 'transcribing', 'thinking', 'sleeping'] },
+  { id: 'running', label: '奔跑 / 工作', row: 7, mode: 'loop', states: [] },
   { id: 'review', label: '复盘 / 回答', row: 8, mode: 'loop', states: ['speaking'] },
 ];
 
@@ -74,7 +74,13 @@ let bubbleHasDraft = false;
 let bubbleExpanded = false;
 let activePet = null;
 let pets = [];
-let behavior = { alwaysOnTop: true, edgeSnap: true, movementEnabled: true, idleMotion: true };
+let behavior = {
+  alwaysOnTop: true,
+  edgeSnap: true,
+  movementEnabled: true,
+  idleMotion: true,
+  speechBubbleSeconds: 10,
+};
 let persistedPosition = null;
 let petMoveSession = null;
 let petWalkSession = null;
@@ -235,7 +241,7 @@ function scanLocalCharacterPackages() {
         dragging: behaviorConfig.draggingRow ?? 4,
         listening: 6,
         transcribing: 6,
-        thinking: behaviorConfig.thinkingRow ?? 7,
+        thinking: behaviorConfig.thinkingRow ?? 6,
         speaking: behaviorConfig.talkingRow ?? 8,
         sleeping: 6,
         error: 5,
@@ -460,6 +466,7 @@ function sanitizeConsoleSettings(candidate) {
       startWithSystem: behavior.startWithSystem === true,
       movementEnabled: behavior.movementEnabled !== false,
       idleMotion: behavior.idleMotion !== false,
+      speechBubbleSeconds: Math.round(sanitizeFiniteNumber(behavior.speechBubbleSeconds, 5, 30, 10) / 5) * 5,
       clickThroughShortcut: behavior.clickThroughShortcut !== false,
       quietMode: behavior.quietMode !== false,
       quietStart: sanitizeTime(behavior.quietStart, '23:00'),
@@ -868,6 +875,7 @@ function chatSnapshotForPet(petId = activePet?.id) {
 
 function emitChatEvent(channel, payload) {
   if (bubbleWindow && !bubbleWindow.isDestroyed()) bubbleWindow.webContents.send(channel, payload);
+  if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send(channel, payload);
 }
 
 async function requestModelCompletion({ llm, endpoint, apiKey, messages, signal, onDelta }) {
@@ -964,11 +972,13 @@ async function runChatRequest(request, llm, endpoint, apiKey) {
     if (activeChatRequest === request) activeChatRequest = null;
     emitChatEvent('chat:error', { requestId: request.id, code, ...(stoppedMessage ? { message: stoppedMessage } : {}) });
     if (code === 'cancelled') {
-      if (runtimeState.uiState === 'thinking' || runtimeState.uiState === 'speaking') setUiState('input_open');
+      if (runtimeState.uiState === 'thinking' || runtimeState.uiState === 'speaking') {
+        setUiState(request.origin === 'quick' ? 'idle' : 'input_open');
+      }
     } else {
       setUiState('error');
       const errorTimer = setTimeout(() => {
-        if (runtimeState.uiState === 'error') setUiState('input_open');
+        if (runtimeState.uiState === 'error') setUiState(request.origin === 'quick' ? 'idle' : 'input_open');
       }, 1800);
       errorTimer.unref?.();
     }
@@ -977,7 +987,7 @@ async function runChatRequest(request, llm, endpoint, apiKey) {
   }
 }
 
-async function startChatMessage(candidate) {
+async function startChatMessage(candidate, origin = 'full') {
   if (activeChatRequest) return { started: false, error: 'busy' };
   const message = sanitizeChatContent(candidate, MAX_CHAT_MESSAGE_CHARS);
   if (!message) return { started: false, error: 'invalid-message' };
@@ -993,6 +1003,7 @@ async function startChatMessage(candidate) {
     partial: '',
     timedOut: false,
     cancelReason: null,
+    origin,
   };
   activeChatRequest = request;
   try {
@@ -1130,6 +1141,7 @@ function safeDesktopSnapshot() {
     runtime: {
       ...runtimeState,
       visible: Boolean(petWindow?.isVisible()),
+      speechBubbleSeconds: behavior.speechBubbleSeconds,
     },
   };
 }
@@ -1518,6 +1530,7 @@ function showBubbleWindow() {
   stopPetWalk();
   setClickThrough(false);
   showPetWindow();
+  petWindow?.webContents.send('pet-quick-input:close');
   const window = createBubbleWindow();
   positionBubbleWindow();
   if (!activeChatRequest) setUiState('input_open');
@@ -1526,6 +1539,24 @@ function showBubbleWindow() {
   window.webContents.send('pet-bubble:focus-input');
   window.webContents.send('chat:snapshot', chatSnapshotForPet());
   return true;
+}
+
+function setSpeechBubbleSeconds(candidate) {
+  const seconds = Math.round(sanitizeFiniteNumber(candidate, 5, 30, 10) / 5) * 5;
+  behavior.speechBubbleSeconds = seconds;
+  broadcastState();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('runtime:behavior-setting-changed', {
+      key: 'speechBubbleSeconds',
+      value: seconds,
+    });
+  }
+  const settings = loadConsoleSettings();
+  if (settings) {
+    settings.behavior.speechBubbleSeconds = seconds;
+    void saveConsoleSettings(settings);
+  }
+  return seconds;
 }
 
 function hideBubbleWindow() {
@@ -1570,7 +1601,7 @@ function showPetContextMenu() {
     click: () => previewPetAnimationFromMain(animation.id),
   })) ?? [];
   const menu = Menu.buildFromTemplate([
-    { label: '输入文字', accelerator: 'Ctrl+Alt+Enter', click: showBubbleWindow },
+    { label: '打开完整对话', accelerator: 'Ctrl+Alt+Enter', click: showBubbleWindow },
     { label: '开始语音对话（待接入）', enabled: false },
     {
       label: '停止当前回答',
@@ -1591,6 +1622,15 @@ function showPetContextMenu() {
       label: '展示动作',
       enabled: !isBusy && animationItems.length > 0,
       submenu: animationItems.length ? animationItems : [{ label: '当前角色没有可用动作', enabled: false }],
+    },
+    {
+      label: `回复气泡停留 · ${behavior.speechBubbleSeconds} 秒`,
+      submenu: [5, 10, 15, 20, 30].map((seconds) => ({
+        label: `${seconds} 秒`,
+        type: 'radio',
+        checked: behavior.speechBubbleSeconds === seconds,
+        click: () => setSpeechBubbleSeconds(seconds),
+      })),
     },
     { type: 'separator' },
     { label: '切换桌宠', submenu: switchItems.length ? switchItems : [{ label: '暂无桌宠', enabled: false }] },
@@ -1648,7 +1688,7 @@ async function rebuildTrayMenu() {
   if (!tray) return;
   const menu = Menu.buildFromTemplate([
     { label: petWindow?.isVisible() ? '隐藏桌宠' : '显示桌宠', click: () => (petWindow?.isVisible() ? hidePetWindow() : showPetWindow()) },
-    { label: '输入文字', click: showBubbleWindow },
+    { label: '打开完整对话', click: showBubbleWindow },
     { label: '打开设置', click: showSettingsWindow },
     { type: 'separator' },
     {
@@ -1729,6 +1769,7 @@ function registerIpc() {
       edgeSnap: payload.behavior?.edgeSnap !== false,
       movementEnabled: payload.behavior?.movementEnabled !== false,
       idleMotion: payload.behavior?.idleMotion !== false,
+      speechBubbleSeconds: Math.round(sanitizeFiniteNumber(payload.behavior?.speechBubbleSeconds, 5, 30, 10) / 5) * 5,
     };
     runtimeState.alwaysOnTop = behavior.alwaysOnTop;
     petWindow?.setAlwaysOnTop(runtimeState.alwaysOnTop, 'floating');
@@ -1741,12 +1782,20 @@ function registerIpc() {
 
   ipcMain.handle('runtime:get-desktop-snapshot', (event) => (isKnownSender(event) ? safeDesktopSnapshot() : null));
   ipcMain.handle('chat:get-state', (event) => (
-    isSender(event, bubbleWindow) ? chatSnapshotForPet() : { petId: '', messages: [], activeRequest: null }
+    isSender(event, bubbleWindow) || isSender(event, petWindow)
+      ? chatSnapshotForPet()
+      : { petId: '', messages: [], activeRequest: null }
   ));
   ipcMain.handle('chat:send-message', (event, message) => (
-    isSender(event, bubbleWindow) ? startChatMessage(message) : { started: false, error: 'forbidden' }
+    isSender(event, bubbleWindow)
+      ? startChatMessage(message, 'full')
+      : isSender(event, petWindow)
+        ? startChatMessage(message, 'quick')
+        : { started: false, error: 'forbidden' }
   ));
-  ipcMain.handle('chat:stop', (event) => (isSender(event, bubbleWindow) ? stopActiveChat() : false));
+  ipcMain.handle('chat:stop', (event) => (
+    isSender(event, bubbleWindow) || isSender(event, petWindow) ? stopActiveChat() : false
+  ));
   ipcMain.handle('chat:clear', (event) => {
     if (!isSender(event, bubbleWindow) || !activePet?.id || activeChatRequest) return false;
     conversationsByPet.delete(activePet.id);
@@ -1838,6 +1887,19 @@ function registerIpc() {
       ? startPetWalk(direction, { distance: 72, speed: 54 })
       : { started: false, reason: 'forbidden' }
   ));
+  ipcMain.handle('pet-quick-input:set-open', (event, open) => {
+    if (!isSender(event, petWindow)) return false;
+    if (open === true) {
+      if (activeChatRequest) return false;
+      stopPetWalk();
+      bubbleWindow?.hide();
+      bubbleHasDraft = false;
+      setUiState('input_open');
+      return true;
+    }
+    if (!activeChatRequest && runtimeState.uiState === 'input_open') setUiState('idle');
+    return true;
+  });
 
   ipcMain.on('pet-window:context-menu', (event) => {
     if (isSender(event, petWindow)) showPetContextMenu();

@@ -150,14 +150,19 @@ try {
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 320));
   await petWindow.screenshot({ path: screenshotPath });
 
-  await petWindow.getByRole('button', { name: /单击打开文字输入/ }).click();
+  await petWindow.getByRole('button', { name: /单击打开快捷输入/ }).click();
+  await petWindow.getByPlaceholder('想和 Rem 说什么？').waitFor({ state: 'visible' });
+  await petWindow.getByPlaceholder('想和 Rem 说什么？').fill('打包版 Chat 错误提示验证');
+  await petWindow.getByRole('button', { name: '发送消息' }).click();
+  await petWindow.getByText(/请先在控制台配置模型地址与名称/).waitFor();
+  const packagedChatState = await petWindow.evaluate(() => window.desktopRuntime?.getChatState());
+  const quickInputBubbleHidden = await electronApp.evaluate(({ BrowserWindow }) => (
+    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠对话')?.isVisible() === false
+  ));
+  await petWindow.screenshot({ path: bubbleScreenshotPath });
+  await petWindow.evaluate(() => window.desktopRuntime?.openPetInput());
   await bubbleWindow.getByPlaceholder('输入消息…').waitFor({ state: 'visible' });
-  await bubbleWindow.getByPlaceholder('输入消息…').fill('打包版 Chat 错误提示验证');
-  await bubbleWindow.getByRole('button', { name: '发送消息' }).click();
-  await bubbleWindow.getByText(/还没有配置可用模型/).waitFor();
-  const packagedChatState = await bubbleWindow.evaluate(() => window.desktopRuntime?.getChatState());
-  const packagedChatErrorReady = packagedChatState?.activeRequest === null;
-  await bubbleWindow.screenshot({ path: bubbleScreenshotPath });
+  const packagedChatErrorReady = packagedChatState?.activeRequest === null && quickInputBubbleHidden;
 
   const normalize = (value) => resolve(value).toLocaleLowerCase('en-US');
   const seededManifest = join(expectedCharactersRoot, 'rem--l1', 'pet.json');
@@ -201,6 +206,7 @@ try {
     movementSettingReady,
     disabledWalk,
     packagedChatErrorReady,
+    quickInputBubbleHidden,
     unexpectedRequests,
     screenshotPath,
     bubbleScreenshotPath,

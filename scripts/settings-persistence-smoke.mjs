@@ -65,6 +65,12 @@ try {
   await session.consoleWindow.getByRole('button', { name: '桌面行为' }).click();
   const movementSwitch = session.consoleWindow.getByRole('switch', { name: '允许桌宠自主移动' });
   await movementSwitch.click();
+  const speechDuration = session.consoleWindow.locator('input[name="speech-bubble-seconds"]');
+  await speechDuration.evaluate((input) => {
+    input.value = '20';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await session.consoleWindow.getByText('已保存到本机', { exact: true }).waitFor();
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 350));
   await session.consoleWindow.screenshot({ path: screenshotPath });
@@ -89,6 +95,9 @@ try {
   const restoredMovementEnabled = await session.consoleWindow
     .getByRole('switch', { name: '允许桌宠自主移动' })
     .getAttribute('aria-checked');
+  const restoredSpeechBubbleSeconds = await session.consoleWindow
+    .locator('input[name="speech-bubble-seconds"]')
+    .inputValue();
   await session.consoleWindow.getByRole('button', { name: '模型连接' }).click();
   session.consoleWindow.once('dialog', (dialog) => dialog.accept());
   await session.consoleWindow.getByRole('button', { name: '移除已保存密钥' }).click();
@@ -100,8 +109,10 @@ try {
     passed: settingsJson.version === 1
       && settingsJson.settings?.llm?.profileName === profileName
       && settingsJson.settings?.behavior?.movementEnabled === false
+      && settingsJson.settings?.behavior?.speechBubbleSeconds === 20
       && restoredProfileName === profileName
       && restoredMovementEnabled === 'false'
+      && restoredSpeechBubbleSeconds === '20'
       && restoredApiKeyDraft === ''
       && plaintextAbsent
       && !existsSync(secretPath),
@@ -109,6 +120,7 @@ try {
     settingsVersion: settingsJson.version,
     restoredProfileName,
     restoredMovementEnabled: restoredMovementEnabled === 'true',
+    restoredSpeechBubbleSeconds: Number(restoredSpeechBubbleSeconds),
     restoredApiKeyDraftEmpty: restoredApiKeyDraft === '',
     plaintextAbsent,
     encryptedSecretRemoved: !existsSync(secretPath),

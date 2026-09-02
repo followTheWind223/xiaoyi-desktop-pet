@@ -119,6 +119,7 @@ export interface BehaviorSettings {
   startWithSystem: boolean;
   movementEnabled: boolean;
   idleMotion: boolean;
+  speechBubbleSeconds: number;
   clickThroughShortcut: boolean;
   quietMode: boolean;
   quietStart: string;
@@ -182,6 +183,7 @@ export interface RuntimePetState {
   muted: boolean;
   wakePaused: boolean;
   alwaysOnTop: boolean;
+  speechBubbleSeconds: number;
 }
 
 export interface DesktopSnapshot {

@@ -61,6 +61,7 @@ interface DesktopRuntimeApi {
   movePetWindow(position: { screenX: number; screenY: number } | { deltaX: number; deltaY: number }): Promise<{ moved: boolean; reason?: 'locked' | 'invalid' }>;
   finishPetMove(): Promise<boolean>;
   showPetContextMenu(): void;
+  setQuickInputOpen(open: boolean): Promise<boolean>;
   setConversationState(state: PetUiState): void;
   setBubbleHasDraft(hasDraft: boolean): void;
   getChatState(): Promise<ChatSnapshot>;
@@ -71,6 +72,8 @@ interface DesktopRuntimeApi {
   onPetStateChanged(callback: (state: RuntimePetState) => void): DisposeListener;
   onPreviewPetAnimation(callback: (animation: CharacterAnimationDefinition) => void): DisposeListener;
   onSwitchPet(callback: (id: string) => void): DisposeListener;
+  onBehaviorSettingChanged(callback: (payload: { key: 'speechBubbleSeconds'; value: number }) => void): DisposeListener;
+  onQuickInputClose(callback: () => void): DisposeListener;
   onBubbleFocus(callback: () => void): DisposeListener;
   onStopConversation(callback: () => void): DisposeListener;
   onChatSnapshot(callback: (snapshot: ChatSnapshot) => void): DisposeListener;

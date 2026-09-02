@@ -24,8 +24,8 @@ const defaultHatchAnimations: CharacterAnimationDefinition[] = [
   { id: 'waving', label: '挥手', row: 3, mode: 'once', states: ['hover', 'input_open'] },
   { id: 'jumping', label: '跳跃', row: 4, mode: 'loop', states: ['dragging'] },
   { id: 'failed', label: '失败', row: 5, mode: 'once', states: ['error'] },
-  { id: 'waiting', label: '等待', row: 6, mode: 'loop', states: ['listening', 'transcribing', 'sleeping'] },
-  { id: 'running', label: '奔跑 / 工作', row: 7, mode: 'loop', states: ['thinking'] },
+  { id: 'waiting', label: '等待', row: 6, mode: 'loop', states: ['listening', 'transcribing', 'thinking', 'sleeping'] },
+  { id: 'running', label: '奔跑 / 工作', row: 7, mode: 'loop', states: [] },
   { id: 'review', label: '复盘 / 回答', row: 8, mode: 'loop', states: ['speaking'] },
 ];
 
@@ -97,6 +97,7 @@ const defaultBehavior: BehaviorSettings = {
   startWithSystem: false,
   movementEnabled: true,
   idleMotion: true,
+  speechBubbleSeconds: 10,
   clickThroughShortcut: true,
   quietMode: true,
   quietStart: '23:00',
@@ -190,7 +191,7 @@ function characterPackageToPet(characterPackage: CharacterPackage): PetProfile {
     dragging: behavior.draggingRow ?? 4,
     listening: 6,
     transcribing: 6,
-    thinking: behavior.thinkingRow ?? 7,
+    thinking: behavior.thinkingRow ?? 6,
     speaking: behavior.talkingRow ?? 8,
     sleeping: 6,
     error: 5,
@@ -500,6 +501,11 @@ export const useConsoleStore = defineStore('console', () => {
   }
 
   desktopRuntime?.onSwitchPet((id) => switchPet(id));
+  desktopRuntime?.onBehaviorSettingChanged(({ key, value }) => {
+    if (key === 'speechBubbleSeconds' && Number.isFinite(value)) {
+      behavior.value.speechBubbleSeconds = value;
+    }
+  });
   if (desktopRuntime) void initializeDesktopSettings();
   else syncDesktopRuntime();
 

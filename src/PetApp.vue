@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { LockKeyhole, MessageCircleMore } from '@lucide/vue';
+import { ArrowUp, LockKeyhole, MessageCircleMore, X } from '@lucide/vue';
 import petReference from './assets/pet-reference.png';
-import type { CharacterAnimationDefinition, PetProfile, PetUiState, RuntimePetState } from './types';
+import type {
+  CharacterAnimationDefinition,
+  ChatErrorCode,
+  PetProfile,
+  PetUiState,
+  RuntimePetState,
+} from './types';
 
 const fallbackPet: PetProfile = {
   id: 'pet-xiaoyi',
@@ -24,8 +30,19 @@ const hint = ref('');
 const previewAnimation = ref<CharacterAnimationDefinition | null>(null);
 const spriteCanvas = ref<HTMLCanvasElement | null>(null);
 const spriteReady = ref(false);
+const quickInputOpen = ref(false);
+const quickDraft = ref('');
+const quickInput = ref<HTMLInputElement | null>(null);
+const quickError = ref('');
+const quickRequestId = ref<string | null>(null);
+const quickSendPending = ref(false);
+const speechText = ref('');
+const speechVisible = ref(false);
+const speechStreaming = ref(false);
+const speechBubbleSeconds = ref(10);
 let hintTimer: number | undefined;
 let previewTimer: number | undefined;
+let speechTimer: number | undefined;
 let longPressTimer: number | undefined;
 let pointerStart: { x: number; y: number; screenX: number; screenY: number; at: number } | null = null;
 let dragReady = false;
@@ -36,6 +53,10 @@ let moveLoopPromise: Promise<void> | undefined;
 let offProfile: (() => void) | undefined;
 let offState: (() => void) | undefined;
 let offPreviewAnimation: (() => void) | undefined;
+let offQuickInputClose: (() => void) | undefined;
+let offChatChunk: (() => void) | undefined;
+let offChatComplete: (() => void) | undefined;
+let offChatError: (() => void) | undefined;
 let spriteImage: HTMLImageElement | null = null;
 let spriteAnimationFrame: number | undefined;
 let spriteLoadToken = 0;
@@ -56,7 +77,7 @@ const stateLabel = computed(() => {
     dragging: locked.value ? '位置已锁定' : '正在移动',
     listening: '正在倾听',
     transcribing: '正在识别',
-    thinking: '想一想…',
+    thinking: '等待回复…',
     speaking: '正在回答',
     sleeping: '休息中',
     error: '需要帮忙',
@@ -66,6 +87,46 @@ const stateLabel = computed(() => {
 function applyRuntimeState(next: RuntimePetState) {
   state.value = next.uiState;
   locked.value = next.locked;
+  speechBubbleSeconds.value = next.speechBubbleSeconds ?? 10;
+}
+
+const quickErrorCopies: Partial<Record<ChatErrorCode, string>> = {
+  'model-not-configured': '请先在控制台配置模型地址与名称。',
+  'api-key-missing': '请先在控制台安全保存 API Key。',
+  'api-key-unreadable': 'API Key 无法读取，请重新保存。',
+  'secure-storage-unavailable': 'Windows 安全存储当前不可用。',
+  'unsafe-endpoint': '模型地址不安全，已阻止请求。',
+  authentication: '模型鉴权失败，请检查 API Key。',
+  'model-or-endpoint-not-found': '没有找到模型或对话接口。',
+  'rate-limited': '请求太频繁，请稍后再试。',
+  'provider-unavailable': '模型服务暂时不可用。',
+  'request-rejected': '模型服务拒绝了本次请求。',
+  'invalid-response': '模型返回格式不兼容。',
+  'empty-response': '模型没有返回内容。',
+  'response-too-large': '回复过长，已停止接收。',
+  timeout: '等待回复超时，请重试。',
+  network: '无法连接模型服务。',
+  busy: '上一条回复还没有结束。',
+  'invalid-message': '请输入 1 到 1200 个字符。',
+  'pet-unavailable': '桌宠还没有准备好。',
+  forbidden: '当前窗口不能发送消息。',
+};
+
+function clearSpeechTimer() {
+  if (speechTimer) window.clearTimeout(speechTimer);
+  speechTimer = undefined;
+}
+
+function dismissSpeech() {
+  clearSpeechTimer();
+  speechVisible.value = false;
+  speechStreaming.value = false;
+  speechText.value = '';
+}
+
+function scheduleSpeechDismiss() {
+  clearSpeechTimer();
+  speechTimer = window.setTimeout(dismissSpeech, speechBubbleSeconds.value * 1000);
 }
 
 function showHint(message: string) {
@@ -96,8 +157,51 @@ function showAnimationPreview(next: CharacterAnimationDefinition) {
     : 2200);
 }
 
-function openInput() {
-  void window.desktopRuntime?.openPetInput();
+async function openInput() {
+  if (state.value === 'thinking' || state.value === 'speaking') {
+    showHint('正在回复，请稍候');
+    return;
+  }
+  const opened = await window.desktopRuntime?.setQuickInputOpen(true);
+  if (opened === false) return;
+  dismissSpeech();
+  quickError.value = '';
+  quickInputOpen.value = true;
+  await nextTick();
+  quickInput.value?.focus();
+}
+
+function closeQuickInput(clearDraft = false) {
+  quickInputOpen.value = false;
+  quickError.value = '';
+  if (clearDraft) quickDraft.value = '';
+  void window.desktopRuntime?.setQuickInputOpen(false);
+}
+
+async function submitQuickMessage() {
+  const message = quickDraft.value.trim();
+  if (!message || quickSendPending.value) return;
+  quickSendPending.value = true;
+  quickError.value = '';
+  quickRequestId.value = null;
+  dismissSpeech();
+  let result;
+  try {
+    result = await window.desktopRuntime?.sendChatMessage(message);
+  } catch {
+    result = { started: false, error: 'network' as ChatErrorCode };
+  }
+  quickSendPending.value = false;
+  if (!result?.started || !result.requestId) {
+    quickError.value = quickErrorCopies[result?.error ?? 'network'] ?? '发送失败，请稍后再试。';
+    await nextTick();
+    quickInput.value?.focus();
+    return;
+  }
+  quickRequestId.value = result.requestId;
+  quickDraft.value = '';
+  quickInputOpen.value = false;
+  void window.desktopRuntime?.setQuickInputOpen(false);
 }
 
 function openContextMenu() {
@@ -370,6 +474,46 @@ onMounted(async () => {
   offProfile = window.desktopRuntime?.onPetProfileChanged((profile) => (pet.value = profile));
   offState = window.desktopRuntime?.onPetStateChanged(applyRuntimeState);
   offPreviewAnimation = window.desktopRuntime?.onPreviewPetAnimation(showAnimationPreview);
+  offQuickInputClose = window.desktopRuntime?.onQuickInputClose(() => {
+    quickInputOpen.value = false;
+    quickError.value = '';
+  });
+  offChatChunk = window.desktopRuntime?.onChatChunk((payload) => {
+    if (quickRequestId.value && payload.requestId !== quickRequestId.value) return;
+    if (!quickRequestId.value && !quickSendPending.value) return;
+    quickRequestId.value = payload.requestId;
+    clearSpeechTimer();
+    speechText.value += payload.delta;
+    speechVisible.value = true;
+    speechStreaming.value = true;
+  });
+  offChatComplete = window.desktopRuntime?.onChatComplete((payload) => {
+    if (quickRequestId.value && payload.requestId !== quickRequestId.value) return;
+    if (!quickRequestId.value && !quickSendPending.value) return;
+    quickRequestId.value = null;
+    quickSendPending.value = false;
+    speechText.value = payload.message.content;
+    speechVisible.value = true;
+    speechStreaming.value = false;
+    scheduleSpeechDismiss();
+  });
+  offChatError = window.desktopRuntime?.onChatError((payload) => {
+    if (quickRequestId.value && payload.requestId !== quickRequestId.value) return;
+    if (!quickRequestId.value && !quickSendPending.value) return;
+    quickRequestId.value = null;
+    quickSendPending.value = false;
+    if (payload.message?.content) {
+      speechText.value = payload.message.content;
+      speechVisible.value = true;
+      speechStreaming.value = false;
+      scheduleSpeechDismiss();
+    } else if (payload.code !== 'cancelled') {
+      speechText.value = quickErrorCopies[payload.code] ?? '回复失败，请稍后再试。';
+      speechVisible.value = true;
+      speechStreaming.value = false;
+      scheduleSpeechDismiss();
+    }
+  });
 });
 
 watch(() => pet.value.sprite?.assetUrl, () => void loadActiveSprite());
@@ -383,18 +527,27 @@ watch(state, () => {
 onBeforeUnmount(() => {
   if (hintTimer) window.clearTimeout(hintTimer);
   if (previewTimer) window.clearTimeout(previewTimer);
+  clearSpeechTimer();
   if (longPressTimer) window.clearTimeout(longPressTimer);
   spriteLoadToken += 1;
   stopSpriteAnimation();
   offProfile?.();
   offState?.();
   offPreviewAnimation?.();
+  offQuickInputClose?.();
+  offChatChunk?.();
+  offChatComplete?.();
+  offChatError?.();
 });
 </script>
 
 <template>
-  <main class="pet-stage" :style="{ '--pet-accent': pet.accent }">
-    <div v-if="stateLabel" class="pet-state-pill" aria-live="polite">{{ stateLabel }}</div>
+  <main :class="['pet-stage', { 'quick-input-open': quickInputOpen }]" :style="{ '--pet-accent': pet.accent }">
+    <section v-if="speechVisible" class="pet-speech-bubble" aria-label="桌宠回复" aria-live="polite">
+      <button type="button" title="关闭回复" aria-label="关闭回复" @click="dismissSpeech"><X :size="12" aria-hidden="true" /></button>
+      <p>{{ speechText }}<span v-if="speechStreaming" class="pet-stream-caret" aria-hidden="true" /></p>
+    </section>
+    <div v-else-if="stateLabel" class="pet-state-pill" aria-live="polite">{{ stateLabel }}</div>
     <div v-if="hint" class="pet-hint" aria-live="polite">
       <LockKeyhole :size="13" aria-hidden="true" />{{ hint }}
     </div>
@@ -402,7 +555,7 @@ onBeforeUnmount(() => {
     <button
       :class="['pet-surface', `state-${state}`]"
       type="button"
-      :aria-label="`${pet.name}，单击打开文字输入，长按拖动，右键打开菜单`"
+      :aria-label="`${pet.name}，单击打开快捷输入，长按拖动，右键打开完整对话与菜单`"
       @keydown="onKeydown"
       @contextmenu.prevent="openContextMenu"
       @pointerenter="onPointerEnter"
@@ -434,7 +587,38 @@ onBeforeUnmount(() => {
         <span v-else class="pet-glyph">{{ pet.avatarValue }}</span>
       </span>
       <span class="pet-shadow" aria-hidden="true" />
-      <span class="pet-hover-copy"><MessageCircleMore :size="14" aria-hidden="true" />单击对话 · 长按移动</span>
+      <span class="pet-hover-copy"><MessageCircleMore :size="14" aria-hidden="true" />单击快捷对话 · 右键完整对话</span>
     </button>
+
+    <form
+      v-if="quickInputOpen"
+      class="pet-quick-composer"
+      aria-label="快捷对话输入"
+      @submit.prevent="submitQuickMessage"
+      @contextmenu.prevent="openContextMenu"
+      @pointerdown.stop
+      @pointerup.stop
+    >
+      <div class="pet-quick-input-row">
+        <input
+          ref="quickInput"
+          v-model="quickDraft"
+          name="quick-pet-message"
+          type="text"
+          maxlength="1200"
+          autocomplete="off"
+          :placeholder="`想和 ${pet.name} 说什么？`"
+          @keydown.esc.prevent="closeQuickInput()"
+        />
+        <button class="pet-quick-close" type="button" title="关闭输入" aria-label="关闭输入" @click="closeQuickInput()">
+          <X :size="14" aria-hidden="true" />
+        </button>
+        <button class="pet-quick-send" type="submit" :disabled="!quickDraft.trim() || quickSendPending" aria-label="发送消息">
+          <ArrowUp :size="15" aria-hidden="true" />
+        </button>
+      </div>
+      <small v-if="quickError" role="alert">{{ quickError }}</small>
+      <small v-else>Enter 发送 · 右键打开完整对话</small>
+    </form>
   </main>
 </template>

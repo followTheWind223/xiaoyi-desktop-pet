@@ -29,7 +29,6 @@ const lastFailedMessage = ref('');
 const pet = ref<PetProfile | null>(null);
 const input = ref<HTMLTextAreaElement | null>(null);
 const thread = ref<HTMLElement | null>(null);
-let fadeTimer: number | undefined;
 let offProfile: (() => void) | undefined;
 let offState: (() => void) | undefined;
 let offFocus: (() => void) | undefined;
@@ -73,18 +72,6 @@ const errorCopies: Partial<Record<ChatErrorCode, string>> = {
 const errorCopy = computed(() => (
   errorCode.value ? errorCopies[errorCode.value] ?? '回复失败，请稍后重试。' : ''
 ));
-
-function clearFadeTimer() {
-  if (fadeTimer) window.clearTimeout(fadeTimer);
-  fadeTimer = undefined;
-}
-
-function scheduleFade() {
-  clearFadeTimer();
-  fadeTimer = window.setTimeout(() => {
-    if (!draft.value.trim() && !busy.value) void window.desktopRuntime?.hidePetBubble();
-  }, 9000);
-}
 
 async function scrollToLatest() {
   await nextTick();
@@ -133,7 +120,6 @@ async function stopAnswer() {
 async function submit(messageOverride?: string) {
   const message = (messageOverride ?? draft.value).trim();
   if (!message || busy.value) return;
-  clearFadeTimer();
   errorCode.value = null;
   lastFailedMessage.value = message;
   requestPhase.value = 'thinking';
@@ -188,7 +174,6 @@ async function clearConversation() {
 }
 
 function onInput() {
-  clearFadeTimer();
   window.desktopRuntime?.setBubbleHasDraft(Boolean(draft.value.trim()));
   void resizeInput();
 }
@@ -228,7 +213,6 @@ onMounted(async () => {
     errorCode.value = null;
     syncBubbleLayout();
     void scrollToLatest();
-    scheduleFade();
   });
   offError = window.desktopRuntime?.onChatError((payload) => {
     if (activeRequestId.value && payload.requestId !== activeRequestId.value) return;
@@ -260,7 +244,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  clearFadeTimer();
   offProfile?.();
   offState?.();
   offFocus?.();
@@ -291,7 +274,7 @@ onBeforeUnmount(() => {
           >
             <Trash2 :size="15" aria-hidden="true" />
           </button>
-          <button class="bubble-icon-button" type="button" aria-label="收起对话气泡" @click="closeBubble">
+          <button class="bubble-icon-button" type="button" aria-label="关闭完整对话" @click="closeBubble">
             <Minus :size="17" aria-hidden="true" />
           </button>
         </div>

@@ -52,11 +52,13 @@ const mockServer = createServer((request, response) => {
     response.on('error', () => undefined);
     const lastUserMessage = [...(payload.messages ?? [])].reverse().find((message) => message.role === 'user')?.content ?? '';
     const stopScenario = lastUserMessage.includes('测试停止回答');
-    response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '你好，我是 Rem。' } }] })}\n\n`);
+    setTimeout(() => {
+      response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '你好，我是 Rem。' } }] })}\n\n`);
+    }, stopScenario ? 40 : 180);
     setTimeout(() => {
       response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: stopScenario ? '这段回复不应完整显示。' : '已经收到你的桌面端交互验证。' } }] })}\n\n`);
-    }, stopScenario ? 1200 : 180);
-    setTimeout(() => response.end('data: [DONE]\n\n'), stopScenario ? 1800 : 420);
+    }, stopScenario ? 1200 : 360);
+    setTimeout(() => response.end('data: [DONE]\n\n'), stopScenario ? 1800 : 560);
   });
 });
 await new Promise((resolveListen, rejectListen) => {
@@ -314,28 +316,42 @@ try {
   await window.getByRole('button', { name: '桌宠管理' }).click();
   await window.getByRole('heading', { name: '选择今天陪伴你的角色' }).waitFor();
 
-  await petWindow.getByRole('button', { name: /单击打开文字输入/ }).click();
-  await bubbleWindow.getByPlaceholder('输入消息…').waitFor({ state: 'visible' });
-  const compactBubbleBounds = await electronApp.evaluate(({ BrowserWindow }) => (
-    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠对话')?.getBounds()
+  await petWindow.getByRole('button', { name: /单击打开快捷输入/ }).click();
+  const quickInput = petWindow.getByPlaceholder('想和 Rem 说什么？');
+  await quickInput.waitFor({ state: 'visible' });
+  const bubbleHiddenDuringQuickInput = await electronApp.evaluate(({ BrowserWindow }) => (
+    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠对话')?.isVisible() === false
   ));
-  await bubbleWindow.screenshot({ path: bubbleInputScreenshotPath });
-  await bubbleWindow.getByPlaceholder('输入消息…').fill('验证桌面端交互');
-  await bubbleWindow.getByRole('button', { name: '发送消息' }).click();
-  await petWindow.getByText('正在回答').waitFor();
-  const expandedBubbleBounds = await electronApp.evaluate(({ BrowserWindow }) => (
-    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠对话')?.getBounds()
-  ));
-  const adaptiveBubbleLayout = Boolean(compactBubbleBounds && expandedBubbleBounds
-    && Math.abs(compactBubbleBounds.height - 250) <= 2
-    && Math.abs(expandedBubbleBounds.height - 360) <= 2
-    && expandedBubbleBounds.height > compactBubbleBounds.height);
-  const petInteractionReady = true;
+  await petWindow.screenshot({ path: bubbleInputScreenshotPath });
+  await quickInput.fill('验证桌面端交互');
+  await petWindow.getByRole('button', { name: '发送消息' }).click();
+  await petWindow.getByText('等待回复…').waitFor();
+  await petWindow.waitForFunction(() => document.querySelector('.pet-sprite-canvas')?.dataset.spriteRow === '6');
+  const thinkingRow = await spriteCanvas.evaluate((canvas) => Number(canvas.dataset.spriteRow));
+  await petWindow.getByText(/你好，我是 Rem/).waitFor();
+  await petWindow.waitForFunction(() => document.querySelector('.pet-sprite-canvas')?.dataset.spriteRow === '8');
   const speakingRow = await spriteCanvas.evaluate((canvas) => Number(canvas.dataset.spriteRow));
+  await petWindow.getByText(/已经收到你的桌面端交互验证/).waitFor();
+  await petWindow.locator('.pet-stream-caret').waitFor({ state: 'hidden' });
+  const quickSpeechStillVisible = await petWindow.locator('.pet-speech-bubble').isVisible();
+  const quickRuntime = await petWindow.evaluate(() => window.desktopRuntime?.getDesktopSnapshot());
+  const petInteractionReady = bubbleHiddenDuringQuickInput
+    && quickSpeechStillVisible
+    && quickRuntime?.runtime.speechBubbleSeconds === 10;
+  await petWindow.screenshot({ path: petScreenshotPath });
+
+  await petWindow.evaluate(() => window.desktopRuntime?.openPetInput());
+  await bubbleWindow.getByPlaceholder('输入消息…').waitFor({ state: 'visible' });
   await bubbleWindow.getByText(/已经收到你的桌面端交互验证/).waitFor();
-  await bubbleWindow.getByRole('button', { name: '收起对话气泡' }).click();
+  const fullConversationBounds = await electronApp.evaluate(({ BrowserWindow }) => (
+    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠对话')?.getBounds()
+  ));
+  const fullConversationLayout = Boolean(fullConversationBounds
+    && Math.abs(fullConversationBounds.width - 420) <= 2
+    && Math.abs(fullConversationBounds.height - 360) <= 2);
+  await bubbleWindow.getByRole('button', { name: '关闭完整对话' }).click();
   await new Promise((resolve) => setTimeout(resolve, 520));
-  await petWindow.getByRole('button', { name: /单击打开文字输入/ }).click();
+  await petWindow.evaluate(() => window.desktopRuntime?.openPetInput());
   await bubbleWindow.getByText(/已经收到你的桌面端交互验证/).waitFor();
   const restoredChat = await bubbleWindow.evaluate(() => window.desktopRuntime?.getChatState());
   const chatRecoveredAfterHide = Boolean(restoredChat?.messages.some((message) => (
@@ -345,7 +361,6 @@ try {
   const chatHistoryText = existsSync(chatHistoryFile) ? readFileSync(chatHistoryFile, 'utf8') : '';
   const chatHistorySafe = chatHistoryText.includes('验证桌面端交互')
     && !chatHistoryText.includes('electron-secret-never-persist');
-  await petWindow.screenshot({ path: petScreenshotPath });
   await bubbleWindow.screenshot({ path: bubbleScreenshotPath });
 
   await bubbleWindow.getByPlaceholder('输入消息…').fill('测试停止回答');
@@ -393,9 +408,10 @@ try {
       && actionPreviewRow === 3
       && movementSettingReady
       && petInteractionReady
+      && thinkingRow === 6
       && speakingRow === 8
       && mockRequestCount >= 3
-      && adaptiveBubbleLayout
+      && fullConversationLayout
       && chatRecoveredAfterHide
       && chatHistorySafe
       && stopConversationReady
@@ -432,10 +448,11 @@ try {
     longPressGeometryStable,
     longPressBounds: { before: longPressBefore, during: longPressDuring, after: longPressAfter },
     petInteractionReady,
+    thinkingRow,
     speakingRow,
     mockRequestCount,
-    adaptiveBubbleLayout,
-    bubbleBounds: { compact: compactBubbleBounds, expanded: expandedBubbleBounds },
+    fullConversationLayout,
+    fullConversationBounds,
     chatRecoveredAfterHide,
     chatHistorySafe,
     stopConversationReady,

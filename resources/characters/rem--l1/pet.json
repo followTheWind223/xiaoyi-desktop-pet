@@ -15,11 +15,12 @@
     { "id": "waving", "label": "挥手", "row": 3, "mode": "once", "states": ["hover", "input_open"] },
     { "id": "jumping", "label": "跳跃", "row": 4, "mode": "loop", "states": ["dragging"] },
     { "id": "failed", "label": "失败", "row": 5, "mode": "once", "states": ["error"] },
-    { "id": "waiting", "label": "等待", "row": 6, "mode": "loop", "states": ["listening", "transcribing", "sleeping"] },
-    { "id": "running", "label": "奔跑 / 工作", "row": 7, "mode": "loop", "states": ["thinking"] },
+    { "id": "waiting", "label": "等待", "row": 6, "mode": "loop", "states": ["listening", "transcribing", "thinking", "sleeping"] },
+    { "id": "running", "label": "奔跑 / 工作", "row": 7, "mode": "loop", "states": [] },
     { "id": "review", "label": "复盘 / 回答", "row": 8, "mode": "loop", "states": ["speaking"] }
   ],
   "behavior": {
-    "fps": 6
+    "fps": 6,
+    "thinkingRow": 6
   }
 }
