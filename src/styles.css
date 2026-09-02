@@ -248,7 +248,7 @@ input[type='range'] { width: 100%; accent-color: var(--accent); }
 .interaction-cheatsheet { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 .interaction-cheatsheet div { display: flex; align-items: center; gap: 8px; padding: 9px; background: #f0f0eb; border-radius: 8px; }
 .interaction-cheatsheet svg { color: #788173; }.interaction-cheatsheet span { font-size: 8px; }.interaction-cheatsheet strong { display: block; font-size: 9px; }
-.bubble-duration-field { margin-top: 12px; padding-top: 13px; border-top: 1px solid #e8e7e1; }
+.behavior-range-field, .bubble-duration-field { margin-top: 12px; padding-top: 13px; border-top: 1px solid #e8e7e1; }
 .quiet-card { display: grid; grid-template-columns: 1fr 130px auto 130px 190px; align-items: center; gap: 13px; margin-top: 13px; }
 .quiet-intro { display: flex; align-items: center; gap: 10px; }.quiet-intro svg { color: #77709b; }
 .time-field { display: grid; gap: 5px; }.time-separator { color: #aaa; font-size: 9px; }

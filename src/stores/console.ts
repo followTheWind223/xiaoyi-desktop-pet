@@ -97,6 +97,7 @@ const defaultBehavior: BehaviorSettings = {
   startWithSystem: false,
   movementEnabled: true,
   idleMotion: true,
+  petScale: 1,
   speechBubbleSeconds: 10,
   clickThroughShortcut: true,
   quietMode: true,
@@ -501,9 +502,16 @@ export const useConsoleStore = defineStore('console', () => {
   }
 
   desktopRuntime?.onSwitchPet((id) => switchPet(id));
+  desktopRuntime?.onNavigateSection((section) => {
+    if (['overview', 'pets', 'model', 'voice', 'behavior', 'data'].includes(section)) {
+      activeSection.value = section;
+    }
+  });
   desktopRuntime?.onBehaviorSettingChanged(({ key, value }) => {
     if (key === 'speechBubbleSeconds' && Number.isFinite(value)) {
       behavior.value.speechBubbleSeconds = value;
+    } else if (key === 'petScale' && Number.isFinite(value)) {
+      behavior.value.petScale = value;
     }
   });
   if (desktopRuntime) void initializeDesktopSettings();

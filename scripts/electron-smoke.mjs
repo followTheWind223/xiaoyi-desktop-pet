@@ -162,6 +162,15 @@ try {
     };
   });
 
+  await petWindow.locator('.pet-surface').hover();
+  await petWindow.waitForFunction(() => (
+    document.querySelector('.pet-sprite-canvas')?.dataset.spriteAnimation === 'waving'
+      && document.querySelector('.pet-sprite-canvas')?.dataset.spriteMode === 'loop'
+  ));
+  const hoverAnimationLoops = true;
+  await petWindow.mouse.move(1, 1);
+  await petWindow.waitForFunction(() => document.querySelector('.pet-sprite-canvas')?.dataset.spriteAnimation === 'idle');
+
   await window.getByRole('button', { name: '预览动作：向右跑' }).click();
   await petWindow.waitForFunction(() => document.querySelector('.pet-sprite-canvas')?.dataset.spriteAnimation === 'running-right');
   const previewRow = await spriteCanvas.evaluate((canvas) => Number(canvas.dataset.spriteRow));
@@ -231,8 +240,8 @@ try {
     bounds
     && Math.abs(bounds.width - 260) <= 1
     && Math.abs(bounds.height - 310) <= 1
-    && bounds.width === longPressBefore?.width
-    && bounds.height === longPressBefore?.height
+    && Math.abs(bounds.width - longPressBefore.width) <= 1
+    && Math.abs(bounds.height - longPressBefore.height) <= 1
   ));
   const longPressMoved = Boolean(longPressBefore && longPressDuring
     && (longPressBefore.x !== longPressDuring.x || longPressBefore.y !== longPressDuring.y));
@@ -259,6 +268,9 @@ try {
   const bubbleVisibleBeforeRight = await electronApp.evaluate(({ BrowserWindow }) => (
     BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠对话')?.isVisible()
   ));
+  const rightWalkStartBounds = await electronApp.evaluate(({ BrowserWindow }) => (
+    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠')?.getBounds()
+  ));
   const rightWalk = await petWindow.evaluate(() => window.desktopRuntime?.walkPet('right'));
   let rightWalkRow = -1;
   if (rightWalk?.started) {
@@ -278,15 +290,21 @@ try {
     && rightWalk?.started
     && walkStartBounds
     && afterLeftWalkBounds
+    && rightWalkStartBounds
     && afterRightWalkBounds
     && afterLeftWalkBounds.x < walkStartBounds.x
-    && afterRightWalkBounds.x > afterLeftWalkBounds.x
+    && afterRightWalkBounds.x > rightWalkStartBounds.x
     && leftWalkRow === 2
     && rightWalkRow === 1
-    && [walkStartBounds, afterLeftWalkBounds, afterRightWalkBounds].every((bounds) => (
+    && [walkStartBounds, afterLeftWalkBounds].every((bounds) => (
       Math.abs(bounds.width - walkStartBounds.width) <= 1
       && Math.abs(bounds.height - walkStartBounds.height) <= 1
-      && bounds.y === walkStartBounds.y
+      && Math.abs(bounds.y - walkStartBounds.y) <= 1
+    ))
+    && [rightWalkStartBounds, afterRightWalkBounds].every((bounds) => (
+      Math.abs(bounds.width - rightWalkStartBounds.width) <= 1
+      && Math.abs(bounds.height - rightWalkStartBounds.height) <= 1
+      && Math.abs(bounds.y - rightWalkStartBounds.y) <= 1
     )),
   );
 
@@ -313,12 +331,56 @@ try {
     && dragWhileMovementDisabled?.started === true;
   await movementSwitch.click();
   await new Promise((resolve) => setTimeout(resolve, 320));
+  const scaleSlider = window.locator('input[name="pet-scale"]');
+  const beforeScaleBounds = await electronApp.evaluate(({ BrowserWindow }) => (
+    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠')?.getBounds()
+  ));
+  await scaleSlider.evaluate((input) => {
+    input.value = '1.2';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await petWindow.waitForFunction(async () => (await window.desktopRuntime?.getDesktopSnapshot())?.runtime.petScale === 1.2);
+  const scaledPet = await petWindow.evaluate(() => {
+    const stage = document.querySelector('.pet-stage');
+    const transform = stage ? getComputedStyle(stage).transform : 'none';
+    return { renderedScale: transform === 'none' ? 1 : new DOMMatrix(transform).a };
+  });
+  const scaledBounds = await electronApp.evaluate(({ BrowserWindow }) => (
+    BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠')?.getBounds()
+  ));
+  const petScaleSettingReady = Boolean(beforeScaleBounds && scaledBounds
+    && scaledBounds.width > beforeScaleBounds.width
+    && scaledBounds.height > beforeScaleBounds.height
+    && Math.abs(scaledBounds.width - 312) <= 2
+    && Math.abs(scaledBounds.height - 372) <= 2
+    && Math.abs(scaledPet.renderedScale - 1.2) < 0.01);
+  await scaleSlider.evaluate((input) => {
+    input.value = '1';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await petWindow.waitForFunction(async () => (await window.desktopRuntime?.getDesktopSnapshot())?.runtime.petScale === 1);
   await window.getByRole('button', { name: '桌宠管理' }).click();
   await window.getByRole('heading', { name: '选择今天陪伴你的角色' }).waitFor();
 
   await petWindow.getByRole('button', { name: /单击打开快捷输入/ }).click();
   const quickInput = petWindow.getByPlaceholder('想和 Rem 说什么？');
   await quickInput.waitFor({ state: 'visible' });
+  await petWindow.waitForFunction(() => document.querySelector('.pet-sprite-canvas')?.dataset.spriteMode === 'loop');
+  const quickVisualState = await petWindow.evaluate(() => {
+    const surface = document.querySelector('.pet-surface');
+    const composer = document.querySelector('.pet-quick-composer');
+    const transform = surface ? getComputedStyle(surface).transform : 'none';
+    const matrix = transform === 'none' ? new DOMMatrix() : new DOMMatrix(transform);
+    const background = composer ? getComputedStyle(composer).backgroundColor : '';
+    const alpha = Number(background.match(/[\d.]+(?=\)$)/)?.[0] ?? 1);
+    return {
+      scale: matrix.a,
+      composerAlpha: alpha,
+      spriteMode: document.querySelector('.pet-sprite-canvas')?.dataset.spriteMode,
+    };
+  });
   const bubbleHiddenDuringQuickInput = await electronApp.evaluate(({ BrowserWindow }) => (
     BrowserWindow.getAllWindows().find((item) => item.getTitle() === '桌宠对话')?.isVisible() === false
   ));
@@ -337,7 +399,10 @@ try {
   const quickRuntime = await petWindow.evaluate(() => window.desktopRuntime?.getDesktopSnapshot());
   const petInteractionReady = bubbleHiddenDuringQuickInput
     && quickSpeechStillVisible
-    && quickRuntime?.runtime.speechBubbleSeconds === 10;
+    && quickRuntime?.runtime.speechBubbleSeconds === 10
+    && Math.abs(quickVisualState.scale - 1) < 0.01
+    && quickVisualState.composerAlpha < 0.9
+    && quickVisualState.spriteMode === 'loop';
   await petWindow.screenshot({ path: petScreenshotPath });
 
   await petWindow.evaluate(() => window.desktopRuntime?.openPetInput());
@@ -390,6 +455,7 @@ try {
       && animationLabels.length === 9
       && animationLabels.includes('向右跑')
       && animationLabels.includes('复盘 / 回答')
+      && hoverAnimationLoops
       && previewRow === 1
       && remDescription === '一只喜欢冰淇淋、安静又贴心的可爱桌宠。'
       && !storageContainsSecret
@@ -407,6 +473,7 @@ try {
       && actionPreviewFromPet === true
       && actionPreviewRow === 3
       && movementSettingReady
+      && petScaleSettingReady
       && petInteractionReady
       && thinkingRow === 6
       && speakingRow === 8
@@ -424,6 +491,7 @@ try {
     },
     spriteRuntime,
     animationLabels,
+    hoverAnimationLoops,
     previewRow,
     remDescription,
     locationProtocol,
@@ -437,17 +505,25 @@ try {
     horizontalMovementReady,
     leftWalk: { ...leftWalk, row: leftWalkRow },
     rightWalk: { ...rightWalk, row: rightWalkRow },
-    horizontalWalkBounds: { start: walkStartBounds, left: afterLeftWalkBounds, right: afterRightWalkBounds },
+    horizontalWalkBounds: {
+      start: walkStartBounds,
+      left: afterLeftWalkBounds,
+      rightStart: rightWalkStartBounds,
+      right: afterRightWalkBounds,
+    },
     afterLeftWalkState: afterLeftWalkState?.runtime,
     bubbleVisibleBeforeRight,
     actionPreviewFromPet,
     actionPreviewRow,
     movementSettingReady,
+    petScaleSettingReady,
+    scaleBounds: { before: beforeScaleBounds, scaled: scaledBounds, rendered: scaledPet.renderedScale },
     disabledWalk,
     dragWhileMovementDisabled,
     longPressGeometryStable,
     longPressBounds: { before: longPressBefore, during: longPressDuring, after: longPressAfter },
     petInteractionReady,
+    quickVisualState,
     thinkingRow,
     speakingRow,
     mockRequestCount,

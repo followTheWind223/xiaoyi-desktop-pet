@@ -79,6 +79,7 @@ let behavior = {
   edgeSnap: true,
   movementEnabled: true,
   idleMotion: true,
+  petScale: 1,
   speechBubbleSeconds: 10,
 };
 let persistedPosition = null;
@@ -466,6 +467,7 @@ function sanitizeConsoleSettings(candidate) {
       startWithSystem: behavior.startWithSystem === true,
       movementEnabled: behavior.movementEnabled !== false,
       idleMotion: behavior.idleMotion !== false,
+      petScale: Math.round(sanitizeFiniteNumber(behavior.petScale, 0.7, 1.3, 1) * 20) / 20,
       speechBubbleSeconds: Math.round(sanitizeFiniteNumber(behavior.speechBubbleSeconds, 5, 30, 10) / 5) * 5,
       clickThroughShortcut: behavior.clickThroughShortcut !== false,
       quietMode: behavior.quietMode !== false,
@@ -873,6 +875,17 @@ function chatSnapshotForPet(petId = activePet?.id) {
   };
 }
 
+async function chatReadiness() {
+  try {
+    const llm = sanitizeLlmSettings(activeLlmSettings ?? loadConsoleSettings()?.llm);
+    chatEndpointForSettings(llm);
+    await readSecureApiKey();
+    return { ready: true };
+  } catch (error) {
+    return { ready: false, error: chatErrorCode(error) };
+  }
+}
+
 function emitChatEvent(channel, payload) {
   if (bubbleWindow && !bubbleWindow.isDestroyed()) bubbleWindow.webContents.send(channel, payload);
   if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send(channel, payload);
@@ -1141,6 +1154,7 @@ function safeDesktopSnapshot() {
     runtime: {
       ...runtimeState,
       visible: Boolean(petWindow?.isVisible()),
+      petScale: behavior.petScale,
       speechBubbleSeconds: behavior.speechBubbleSeconds,
     },
   };
@@ -1170,20 +1184,33 @@ function setUiState(next) {
   return true;
 }
 
+function normalizedPetScale(candidate) {
+  return Math.round(sanitizeFiniteNumber(candidate, 0.7, 1.3, 1) * 20) / 20;
+}
+
+function petWindowSize() {
+  const scale = normalizedPetScale(behavior.petScale);
+  return {
+    width: Math.round(PET_WIDTH * scale),
+    height: Math.round(PET_HEIGHT * scale),
+  };
+}
+
 function clampPetPosition(x, y) {
+  const size = petWindowSize();
   const targetDisplay = screen.getDisplayNearestPoint({
-    x: Math.round(x + PET_WIDTH / 2),
-    y: Math.round(y + PET_HEIGHT / 2),
+    x: Math.round(x + size.width / 2),
+    y: Math.round(y + size.height / 2),
   });
   const area = targetDisplay.workArea;
-  let nextX = Math.max(area.x, Math.min(area.x + area.width - PET_WIDTH, Math.round(x)));
-  let nextY = Math.max(area.y, Math.min(area.y + area.height - PET_HEIGHT, Math.round(y)));
+  let nextX = Math.max(area.x, Math.min(area.x + area.width - size.width, Math.round(x)));
+  let nextY = Math.max(area.y, Math.min(area.y + area.height - size.height, Math.round(y)));
   if (behavior.edgeSnap) {
     const gap = 18;
     if (Math.abs(nextX - area.x) <= gap) nextX = area.x;
     if (Math.abs(nextY - area.y) <= gap) nextY = area.y;
-    if (Math.abs(nextX + PET_WIDTH - (area.x + area.width)) <= gap) nextX = area.x + area.width - PET_WIDTH;
-    if (Math.abs(nextY + PET_HEIGHT - (area.y + area.height)) <= gap) nextY = area.y + area.height - PET_HEIGHT;
+    if (Math.abs(nextX + size.width - (area.x + area.width)) <= gap) nextX = area.x + area.width - size.width;
+    if (Math.abs(nextY + size.height - (area.y + area.height)) <= gap) nextY = area.y + area.height - size.height;
   }
   return { x: nextX, y: nextY };
 }
@@ -1193,7 +1220,8 @@ function setPetWindowPosition(x, y) {
   const next = clampPetPosition(x, y);
   if (petWindow.isFullScreen()) petWindow.setFullScreen(false);
   if (petWindow.isMaximized()) petWindow.unmaximize();
-  petWindow.setBounds({ x: next.x, y: next.y, width: PET_WIDTH, height: PET_HEIGHT }, false);
+  const size = petWindowSize();
+  petWindow.setBounds({ x: next.x, y: next.y, width: size.width, height: size.height }, false);
   return next;
 }
 
@@ -1253,7 +1281,7 @@ function startPetWalk(direction, options = {}) {
   const bounds = petWindow.getBounds();
   const area = screen.getDisplayMatching(bounds).workArea;
   const available = normalizedDirection === 'right'
-    ? area.x + area.width - PET_WIDTH - bounds.x
+    ? area.x + area.width - bounds.width - bounds.x
     : bounds.x - area.x;
   const requestedDistance = Number.isFinite(options.distance)
     ? Math.max(16, Math.min(160, Number(options.distance)))
@@ -1318,7 +1346,7 @@ function scheduleIdleWalk(delayMs) {
     const bounds = petWindow.getBounds();
     const area = screen.getDisplayMatching(bounds).workArea;
     const leftSpace = bounds.x - area.x;
-    const rightSpace = area.x + area.width - PET_WIDTH - bounds.x;
+    const rightSpace = area.x + area.width - bounds.width - bounds.x;
     let direction = Math.random() < 0.5 ? 'left' : 'right';
     if (direction === 'left' && leftSpace < 24) direction = 'right';
     if (direction === 'right' && rightSpace < 24) direction = 'left';
@@ -1330,9 +1358,10 @@ function scheduleIdleWalk(delayMs) {
 
 function defaultPetPosition() {
   const area = screen.getPrimaryDisplay().workArea;
+  const size = petWindowSize();
   return {
-    x: area.x + area.width - PET_WIDTH - 28,
-    y: area.y + area.height - PET_HEIGHT - 24,
+    x: area.x + area.width - size.width - 28,
+    y: area.y + area.height - size.height - 24,
   };
 }
 
@@ -1398,8 +1427,20 @@ function showSettingsWindow() {
   window.focus();
 }
 
+function showModelSettingsWindow() {
+  const window = createSettingsWindow();
+  const navigate = () => window.webContents.send('runtime:navigate-section', 'model');
+  if (window.webContents.isLoadingMainFrame()) window.webContents.once('did-finish-load', navigate);
+  else navigate();
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  return true;
+}
+
 function createPetWindow() {
   if (petWindow && !petWindow.isDestroyed()) return petWindow;
+  const size = petWindowSize();
   const initial = clampPetPosition(
     persistedPosition?.x ?? defaultPetPosition().x,
     persistedPosition?.y ?? defaultPetPosition().y,
@@ -1408,12 +1449,12 @@ function createPetWindow() {
     title: '桌宠',
     x: initial.x,
     y: initial.y,
-    width: PET_WIDTH,
-    height: PET_HEIGHT,
-    minWidth: PET_WIDTH,
-    minHeight: PET_HEIGHT,
-    maxWidth: PET_WIDTH,
-    maxHeight: PET_HEIGHT,
+    width: size.width,
+    height: size.height,
+    minWidth: Math.round(PET_WIDTH * 0.7),
+    minHeight: Math.round(PET_HEIGHT * 0.7),
+    maxWidth: Math.round(PET_WIDTH * 1.3),
+    maxHeight: Math.round(PET_HEIGHT * 1.3),
     show: false,
     transparent: true,
     frame: false,
@@ -1559,6 +1600,37 @@ function setSpeechBubbleSeconds(candidate) {
   return seconds;
 }
 
+function resizePetWindowForScale(previousBounds) {
+  if (!petWindow || petWindow.isDestroyed()) return false;
+  const bounds = previousBounds ?? petWindow.getBounds();
+  const size = petWindowSize();
+  const nextX = bounds.x + Math.round((bounds.width - size.width) / 2);
+  const nextY = bounds.y + bounds.height - size.height;
+  setPetWindowPosition(nextX, nextY);
+  saveRuntimeState();
+  positionBubbleWindow();
+  return true;
+}
+
+function setPetScale(candidate) {
+  const scale = normalizedPetScale(candidate);
+  if (scale === behavior.petScale) return scale;
+  stopPetWalk();
+  const previousBounds = petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null;
+  behavior.petScale = scale;
+  if (previousBounds) resizePetWindowForScale(previousBounds);
+  broadcastState();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('runtime:behavior-setting-changed', { key: 'petScale', value: scale });
+  }
+  const settings = loadConsoleSettings();
+  if (settings) {
+    settings.behavior.petScale = scale;
+    void saveConsoleSettings(settings);
+  }
+  return scale;
+}
+
 function hideBubbleWindow() {
   bubbleWindow?.hide();
   bubbleHasDraft = false;
@@ -1630,6 +1702,15 @@ function showPetContextMenu() {
         type: 'radio',
         checked: behavior.speechBubbleSeconds === seconds,
         click: () => setSpeechBubbleSeconds(seconds),
+      })),
+    },
+    {
+      label: `桌宠大小 · ${Math.round(behavior.petScale * 100)}%`,
+      submenu: [0.75, 1, 1.25].map((scale) => ({
+        label: `${Math.round(scale * 100)}%`,
+        type: 'radio',
+        checked: behavior.petScale === scale,
+        click: () => setPetScale(scale),
       })),
     },
     { type: 'separator' },
@@ -1764,15 +1845,19 @@ function registerIpc() {
       stopActiveChat();
       stopPetWalk();
     }
+    const previousPetScale = behavior.petScale;
+    const previousPetBounds = petWindow && !petWindow.isDestroyed() ? petWindow.getBounds() : null;
     behavior = {
       alwaysOnTop: payload.behavior?.alwaysOnTop !== false,
       edgeSnap: payload.behavior?.edgeSnap !== false,
       movementEnabled: payload.behavior?.movementEnabled !== false,
       idleMotion: payload.behavior?.idleMotion !== false,
+      petScale: normalizedPetScale(payload.behavior?.petScale),
       speechBubbleSeconds: Math.round(sanitizeFiniteNumber(payload.behavior?.speechBubbleSeconds, 5, 30, 10) / 5) * 5,
     };
     runtimeState.alwaysOnTop = behavior.alwaysOnTop;
     petWindow?.setAlwaysOnTop(runtimeState.alwaysOnTop, 'floating');
+    if (previousPetBounds && previousPetScale !== behavior.petScale) resizePetWindowForScale(previousPetBounds);
     if (behavior.movementEnabled === false || behavior.idleMotion === false) stopPetWalk();
     else if (runtimeState.uiState === 'idle') scheduleIdleWalk();
     broadcastProfile();
@@ -1785,6 +1870,11 @@ function registerIpc() {
     isSender(event, bubbleWindow) || isSender(event, petWindow)
       ? chatSnapshotForPet()
       : { petId: '', messages: [], activeRequest: null }
+  ));
+  ipcMain.handle('chat:get-readiness', (event) => (
+    isSender(event, petWindow) || isSender(event, bubbleWindow)
+      ? chatReadiness()
+      : { ready: false, error: 'forbidden' }
   ));
   ipcMain.handle('chat:send-message', (event, message) => (
     isSender(event, bubbleWindow)
@@ -1820,6 +1910,9 @@ function registerIpc() {
     showSettingsWindow();
     return true;
   });
+  ipcMain.handle('settings-window:show-model', (event) => (
+    isKnownSender(event) ? showModelSettingsWindow() : false
+  ));
   ipcMain.handle('pet-window:reset-position', (event) => {
     if (!isKnownSender(event) || !petWindow) return false;
     stopPetWalk();
@@ -1841,7 +1934,8 @@ function registerIpc() {
     }
     stopPetWalk(false);
     const bounds = petWindow.getBounds();
-    if (bounds.width !== PET_WIDTH || bounds.height !== PET_HEIGHT) {
+    const size = petWindowSize();
+    if (Math.abs(bounds.width - size.width) > 1 || Math.abs(bounds.height - size.height) > 1) {
       setPetWindowPosition(bounds.x, bounds.y);
     }
     const normalizedBounds = petWindow.getBounds();

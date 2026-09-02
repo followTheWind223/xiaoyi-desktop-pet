@@ -71,6 +71,7 @@ await page.getByRole('heading', { name: '控制桌宠如何停留与响应' }).w
   const movementSwitch = page.getByRole('switch', { name: '允许桌宠自主移动' });
   const autoWalkSwitch = page.getByRole('switch', { name: '待机自动散步' });
   const speechBubbleSeconds = await page.locator('input[name="speech-bubble-seconds"]').inputValue();
+  const petScale = await page.locator('input[name="pet-scale"]').inputValue();
 const movementDefaultEnabled = await movementSwitch.getAttribute('aria-checked') === 'true';
 const autoWalkInitiallyAvailable = !(await autoWalkSwitch.isDisabled());
 await movementSwitch.click();
@@ -99,6 +100,7 @@ const result = {
     && autoWalkInitiallyAvailable
     && autoWalkDisabledWithMovement
     && speechBubbleSeconds === '10'
+    && petScale === '1'
     && initialLayout.bodyWidth <= initialLayout.viewportWidth
     && initialLayout.contentWidth <= initialLayout.contentClientWidth
     && minimumLayout.bodyWidth <= minimumLayout.viewportWidth
@@ -109,6 +111,7 @@ const result = {
   autoWalkInitiallyAvailable,
   autoWalkDisabledWithMovement,
   speechBubbleSeconds: Number(speechBubbleSeconds),
+  petScale: Number(petScale),
   modelScrollAfterNavigation,
   modelScrollAfterTest,
   initialLayout,

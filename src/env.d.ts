@@ -6,6 +6,7 @@ import type {
   CharacterPackageScanResult,
   ChatErrorCode,
   ChatMessage,
+  ChatReadiness,
   ChatSendResult,
   ChatSnapshot,
   ConsoleSettingsLoadResult,
@@ -19,6 +20,7 @@ import type {
   RuntimePetState,
   SecureApiKeySaveResult,
   SecureApiKeyStatus,
+  SectionKey,
 } from './types';
 
 type DisposeListener = () => void;
@@ -49,6 +51,7 @@ interface DesktopRuntimeApi {
   hidePetBubble(): Promise<boolean>;
   setBubbleExpanded(expanded: boolean): Promise<boolean>;
   openSettings(): Promise<boolean>;
+  openModelSettings(): Promise<boolean>;
   resetPetPosition(): Promise<boolean>;
   walkPet(direction: 'left' | 'right'): Promise<{
     started: boolean;
@@ -65,6 +68,7 @@ interface DesktopRuntimeApi {
   setConversationState(state: PetUiState): void;
   setBubbleHasDraft(hasDraft: boolean): void;
   getChatState(): Promise<ChatSnapshot>;
+  getChatReadiness(): Promise<ChatReadiness>;
   sendChatMessage(message: string): Promise<ChatSendResult>;
   stopChat(): Promise<boolean>;
   clearChat(): Promise<boolean>;
@@ -72,8 +76,9 @@ interface DesktopRuntimeApi {
   onPetStateChanged(callback: (state: RuntimePetState) => void): DisposeListener;
   onPreviewPetAnimation(callback: (animation: CharacterAnimationDefinition) => void): DisposeListener;
   onSwitchPet(callback: (id: string) => void): DisposeListener;
-  onBehaviorSettingChanged(callback: (payload: { key: 'speechBubbleSeconds'; value: number }) => void): DisposeListener;
+  onBehaviorSettingChanged(callback: (payload: { key: 'speechBubbleSeconds' | 'petScale'; value: number }) => void): DisposeListener;
   onQuickInputClose(callback: () => void): DisposeListener;
+  onNavigateSection(callback: (section: SectionKey) => void): DisposeListener;
   onBubbleFocus(callback: () => void): DisposeListener;
   onStopConversation(callback: () => void): DisposeListener;
   onChatSnapshot(callback: (snapshot: ChatSnapshot) => void): DisposeListener;

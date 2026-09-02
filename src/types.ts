@@ -96,6 +96,11 @@ export interface ChatSendResult {
   error?: ChatErrorCode;
 }
 
+export interface ChatReadiness {
+  ready: boolean;
+  error?: ChatErrorCode;
+}
+
 export interface ModelConnectionTestResult {
   ok: boolean;
   error?: ChatErrorCode;
@@ -119,6 +124,7 @@ export interface BehaviorSettings {
   startWithSystem: boolean;
   movementEnabled: boolean;
   idleMotion: boolean;
+  petScale: number;
   speechBubbleSeconds: number;
   clickThroughShortcut: boolean;
   quietMode: boolean;
@@ -183,6 +189,7 @@ export interface RuntimePetState {
   muted: boolean;
   wakePaused: boolean;
   alwaysOnTop: boolean;
+  petScale: number;
   speechBubbleSeconds: number;
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { ArrowUp, LockKeyhole, MessageCircleMore, X } from '@lucide/vue';
+import { ArrowUp, LoaderCircle, LockKeyhole, MessageCircleMore, Settings2, TriangleAlert, X } from '@lucide/vue';
 import petReference from './assets/pet-reference.png';
 import type {
   CharacterAnimationDefinition,
@@ -34,12 +34,15 @@ const quickInputOpen = ref(false);
 const quickDraft = ref('');
 const quickInput = ref<HTMLInputElement | null>(null);
 const quickError = ref('');
+const quickReadinessChecking = ref(false);
+const quickReadinessError = ref<ChatErrorCode | null>(null);
 const quickRequestId = ref<string | null>(null);
 const quickSendPending = ref(false);
 const speechText = ref('');
 const speechVisible = ref(false);
 const speechStreaming = ref(false);
 const speechBubbleSeconds = ref(10);
+const petScale = ref(1);
 let hintTimer: number | undefined;
 let previewTimer: number | undefined;
 let speechTimer: number | undefined;
@@ -87,6 +90,7 @@ const stateLabel = computed(() => {
 function applyRuntimeState(next: RuntimePetState) {
   state.value = next.uiState;
   locked.value = next.locked;
+  petScale.value = next.petScale ?? 1;
   speechBubbleSeconds.value = next.speechBubbleSeconds ?? 10;
 }
 
@@ -111,6 +115,21 @@ const quickErrorCopies: Partial<Record<ChatErrorCode, string>> = {
   'pet-unavailable': '桌宠还没有准备好。',
   forbidden: '当前窗口不能发送消息。',
 };
+
+const quickSetupCopy = computed(() => {
+  if (quickReadinessError.value === 'model-not-configured') return '还没有选择可用模型';
+  if (quickReadinessError.value === 'api-key-missing') return '还没有安全保存 API Key';
+  if (quickReadinessError.value === 'api-key-unreadable') return 'API Key 需要重新保存';
+  if (quickReadinessError.value === 'secure-storage-unavailable') return 'Windows 安全存储暂不可用';
+  return '模型配置还没有准备好';
+});
+
+function needsModelSetup(error: ChatErrorCode | undefined) {
+  return error === 'model-not-configured'
+    || error === 'api-key-missing'
+    || error === 'api-key-unreadable'
+    || error === 'secure-storage-unavailable';
+}
 
 function clearSpeechTimer() {
   if (speechTimer) window.clearTimeout(speechTimer);
@@ -166,7 +185,21 @@ async function openInput() {
   if (opened === false) return;
   dismissSpeech();
   quickError.value = '';
+  quickReadinessError.value = null;
+  quickReadinessChecking.value = true;
   quickInputOpen.value = true;
+  let readiness;
+  try {
+    readiness = await window.desktopRuntime?.getChatReadiness();
+  } catch {
+    // If the preflight channel is unavailable, keep the composer usable and let submit surface the error.
+  }
+  if (!quickInputOpen.value) return;
+  quickReadinessChecking.value = false;
+  if (readiness && !readiness.ready) {
+    quickReadinessError.value = readiness.error ?? 'model-not-configured';
+    return;
+  }
   await nextTick();
   quickInput.value?.focus();
 }
@@ -174,8 +207,15 @@ async function openInput() {
 function closeQuickInput(clearDraft = false) {
   quickInputOpen.value = false;
   quickError.value = '';
+  quickReadinessChecking.value = false;
+  quickReadinessError.value = null;
   if (clearDraft) quickDraft.value = '';
   void window.desktopRuntime?.setQuickInputOpen(false);
+}
+
+function openModelSettings() {
+  closeQuickInput();
+  void window.desktopRuntime?.openModelSettings();
 }
 
 async function submitQuickMessage() {
@@ -193,7 +233,9 @@ async function submitQuickMessage() {
   }
   quickSendPending.value = false;
   if (!result?.started || !result.requestId) {
-    quickError.value = quickErrorCopies[result?.error ?? 'network'] ?? '发送失败，请稍后再试。';
+    const error = result?.error ?? 'network';
+    if (needsModelSetup(error)) quickReadinessError.value = error;
+    else quickError.value = quickErrorCopies[error] ?? '发送失败，请稍后再试。';
     await nextTick();
     quickInput.value?.focus();
     return;
@@ -288,11 +330,14 @@ function drawSprite(timestamp: number) {
   }
 
   const frameCount = spriteRowFrameCounts[nextRow] ?? sprite.columns;
+  const activeMode = !activePreview && (state.value === 'input_open' || state.value === 'hover')
+    ? 'loop'
+    : activeAnimation?.mode ?? 'loop';
   const activeFps = activeAnimation?.fps ?? sprite.fps;
   const frameDuration = 1000 / Math.max(1, Math.min(30, activeFps));
   if (timestamp - spriteLastFrameAt >= frameDuration) {
     const elapsedFrames = Math.max(1, Math.floor((timestamp - spriteLastFrameAt) / frameDuration));
-    spriteFrameIndex = activeAnimation?.mode === 'once'
+    spriteFrameIndex = activeMode === 'once'
       ? Math.min(frameCount - 1, spriteFrameIndex + elapsedFrames)
       : (spriteFrameIndex + elapsedFrames) % frameCount;
     spriteLastFrameAt = timestamp;
@@ -319,6 +364,7 @@ function drawSprite(timestamp: number) {
     canvas.dataset.spriteFrameCount = String(frameCount);
     canvas.dataset.spriteFps = String(activeFps);
     canvas.dataset.spriteAnimation = activeAnimation?.id ?? state.value;
+    canvas.dataset.spriteMode = activeMode;
     spriteLastDrawKey = drawKey;
   }
 
@@ -542,12 +588,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main :class="['pet-stage', { 'quick-input-open': quickInputOpen }]" :style="{ '--pet-accent': pet.accent }">
+  <main
+    :class="['pet-stage', { 'quick-input-open': quickInputOpen }]"
+    :style="{ '--pet-accent': pet.accent, '--pet-window-scale': petScale }"
+  >
     <section v-if="speechVisible" class="pet-speech-bubble" aria-label="桌宠回复" aria-live="polite">
       <button type="button" title="关闭回复" aria-label="关闭回复" @click="dismissSpeech"><X :size="12" aria-hidden="true" /></button>
       <p>{{ speechText }}<span v-if="speechStreaming" class="pet-stream-caret" aria-hidden="true" /></p>
     </section>
-    <div v-else-if="stateLabel" class="pet-state-pill" aria-live="polite">{{ stateLabel }}</div>
+    <div v-else-if="stateLabel && !quickInputOpen" class="pet-state-pill" aria-live="polite">{{ stateLabel }}</div>
     <div v-if="hint" class="pet-hint" aria-live="polite">
       <LockKeyhole :size="13" aria-hidden="true" />{{ hint }}
     </div>
@@ -599,7 +648,15 @@ onBeforeUnmount(() => {
       @pointerdown.stop
       @pointerup.stop
     >
-      <div class="pet-quick-input-row">
+      <div v-if="quickReadinessChecking" class="pet-quick-checking" aria-live="polite">
+        <LoaderCircle :size="15" aria-hidden="true" />正在检查模型配置…
+      </div>
+      <div v-else-if="quickReadinessError" class="pet-quick-setup" role="alert">
+        <TriangleAlert :size="16" aria-hidden="true" />
+        <span><strong>{{ quickSetupCopy }}</strong><small>先完成模型连接，才能开始对话。</small></span>
+        <button type="button" @click="openModelSettings"><Settings2 :size="13" aria-hidden="true" />去配置</button>
+      </div>
+      <div v-else class="pet-quick-input-row">
         <input
           ref="quickInput"
           v-model="quickDraft"
@@ -608,6 +665,7 @@ onBeforeUnmount(() => {
           maxlength="1200"
           autocomplete="off"
           :placeholder="`想和 ${pet.name} 说什么？`"
+          @input="quickError = ''"
           @keydown.esc.prevent="closeQuickInput()"
         />
         <button class="pet-quick-close" type="button" title="关闭输入" aria-label="关闭输入" @click="closeQuickInput()">
@@ -617,8 +675,8 @@ onBeforeUnmount(() => {
           <ArrowUp :size="15" aria-hidden="true" />
         </button>
       </div>
-      <small v-if="quickError" role="alert">{{ quickError }}</small>
-      <small v-else>Enter 发送 · 右键打开完整对话</small>
+      <small v-if="!quickReadinessChecking && !quickReadinessError && quickError" role="alert">{{ quickError }}</small>
+      <small v-else-if="!quickReadinessChecking && !quickReadinessError">Enter 发送 · 右键打开完整对话</small>
     </form>
   </main>
 </template>

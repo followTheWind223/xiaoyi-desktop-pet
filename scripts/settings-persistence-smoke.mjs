@@ -71,6 +71,12 @@ try {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  const petScale = session.consoleWindow.locator('input[name="pet-scale"]');
+  await petScale.evaluate((input) => {
+    input.value = '1.15';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await session.consoleWindow.getByText('已保存到本机', { exact: true }).waitFor();
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 350));
   await session.consoleWindow.screenshot({ path: screenshotPath });
@@ -98,6 +104,7 @@ try {
   const restoredSpeechBubbleSeconds = await session.consoleWindow
     .locator('input[name="speech-bubble-seconds"]')
     .inputValue();
+  const restoredPetScale = await session.consoleWindow.locator('input[name="pet-scale"]').inputValue();
   await session.consoleWindow.getByRole('button', { name: '模型连接' }).click();
   session.consoleWindow.once('dialog', (dialog) => dialog.accept());
   await session.consoleWindow.getByRole('button', { name: '移除已保存密钥' }).click();
@@ -110,9 +117,11 @@ try {
       && settingsJson.settings?.llm?.profileName === profileName
       && settingsJson.settings?.behavior?.movementEnabled === false
       && settingsJson.settings?.behavior?.speechBubbleSeconds === 20
+      && settingsJson.settings?.behavior?.petScale === 1.15
       && restoredProfileName === profileName
       && restoredMovementEnabled === 'false'
       && restoredSpeechBubbleSeconds === '20'
+      && restoredPetScale === '1.15'
       && restoredApiKeyDraft === ''
       && plaintextAbsent
       && !existsSync(secretPath),
@@ -121,6 +130,7 @@ try {
     restoredProfileName,
     restoredMovementEnabled: restoredMovementEnabled === 'true',
     restoredSpeechBubbleSeconds: Number(restoredSpeechBubbleSeconds),
+    restoredPetScale: Number(restoredPetScale),
     restoredApiKeyDraftEmpty: restoredApiKeyDraft === '',
     plaintextAbsent,
     encryptedSecretRemoved: !existsSync(secretPath),

@@ -41,6 +41,18 @@ function resetPetPosition() {
           <UiSwitch v-model="store.behavior.movementEnabled" label="允许桌宠自主移动" description="允许角色使用左右动作在屏幕上行走；关闭后仍可手动拖拽" />
           <UiSwitch v-model="store.behavior.idleMotion" label="待机自动散步" description="空闲时低频随机向左或向右移动" :disabled="!store.behavior.movementEnabled" />
         </div>
+        <label class="range-field slim behavior-range-field">
+          <div><span>桌宠大小</span><strong>{{ Math.round(store.behavior.petScale * 100) }}%</strong></div>
+          <input
+            v-model.number="store.behavior.petScale"
+            name="pet-scale"
+            type="range"
+            min="0.7"
+            max="1.3"
+            step="0.05"
+          />
+          <small>同步缩放角色、交互区域和桌宠气泡，不会留下多余透明边距。</small>
+        </label>
         <label class="range-field slim bubble-duration-field">
           <div><span>回复气泡停留时间</span><strong>{{ store.behavior.speechBubbleSeconds }} 秒</strong></div>
           <input
